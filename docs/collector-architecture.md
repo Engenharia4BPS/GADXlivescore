@@ -131,9 +131,17 @@ Campos relevantes:
 ```text
 testid
 name
-startdate
-enddate
+dat
+startday
+starttime
+finishday
+finishtime
 ```
+
+O POC read-only de 2026-09-11 não observou `startdate` nem `enddate`. A
+semântica de `dat`, o ano e o timezone ainda não são conhecidos. Para
+`contest.run`, discovery deve registrar candidatos e seus campos raw, mas não
+deve derivar janelas absolutas de WARMUP/ACTIVE/FINISHING com esses valores.
 
 O `testid` é o ID utilizado posteriormente em:
 
@@ -218,6 +226,12 @@ agora > end_at + 60 min
 ```
 
 A tolerância poderá ser configurável.
+
+Essas regras de estado continuam válidas para fontes que fornecem `start_at` e
+`end_at` confiáveis. Para `contest.run`, a semântica de calendário observada não
+é suficiente para aplicá-las em produção. Não construir scheduling de contests
+ativos a partir de uma interpretação adivinhada de `dat`, `startday` ou
+`finishday`.
 
 ---
 
@@ -363,6 +377,12 @@ m10
 ```
 
 Também existem metadados de categoria e localização.
+
+Uma linha retornada por `displayscore` não prova que a estação esteja ativa no
+momento do poll. O POC observou linhas com timestamps históricos. A freshness da
+estação deve ser calculada a partir do `source_timestamp` da própria linha, com
+fallback explícito apenas quando necessário; a presença da linha não deve criar
+ou prolongar atividade por si só.
 
 ---
 
@@ -522,6 +542,10 @@ não gerar novo snapshot
 ```
 
 O raw message pode ser preservado para auditoria.
+
+Para `contest.run`, persistir uma observação não equivale a classificá-la como
+live. A classificação de freshness/stale pertence ao timestamp da observação e
+às regras canônicas, não ao endpoint que a retornou.
 
 ---
 

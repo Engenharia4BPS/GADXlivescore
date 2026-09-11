@@ -11,10 +11,10 @@
 Legenda usada neste documento:
 
 ```text
-CONFIRMADO  comportamento observado em código cliente público ou rota pública conhecida
-OBSERVADO   evidência prática indireta, ainda não validada pelo nosso collector
-INFERIDO    conclusão técnica plausível, não usar como contrato sem teste
-TODO        precisa de validação real
+CONFIRMADO  comportamento reproduzido pelo POC read-only do Araucaria
+OBSERVADO   dado presente em uma resposta do POC, sem semântica completa confirmada
+INFERIDO    conclusão técnica plausível; não usar como contrato sem teste
+NÃO RESOLVIDO  questão aberta que bloqueia uma decisão de produção
 ```
 
 Regra do projeto:
@@ -40,53 +40,79 @@ O frontend é uma aplicação cliente com rotas do tipo:
 
 O Araucaria não deve depender do HTML da aplicação quando houver endpoint JSON disponível.
 
+### 2.1. Evidência do POC baseline
+
+Em 2026-09-11, o POC read-only do Araucaria executou seis `GET` requests
+limitados aos endpoints documentados: `nearest`, `month/9`, categorias e
+`displayscore` de dois `testid` retornados pelo discovery. Todos responderam
+`200 application/json`, sem redirect, `ETag`, `Last-Modified`,
+`Cache-Control`, `Retry-After` ou headers de rate limit observados.
+
+Essa evidência confirma a disponibilidade daqueles paths naquele instante; não
+congela o schema nem a política operacional futura do serviço. O resumo seguro
+para revisão fica em `docs/observations/contest-run/2026-09-11-baseline.md`.
+
 ---
 
 ## 3. Endpoints de leitura identificados
 
 ### 3.1. Contests próximos
 
-**Status: CONFIRMADO**
+**CONFIRMADO:** o POC recebeu `200 application/json` deste path.
 
 ```http
 GET https://contest.run/api/contest/nearest
 ```
 
-Uso:
+Uso limitado confirmado:
 
-- descobrir contests próximos/atuais;
+- descobrir candidatos a contest;
 - obter `testid`;
 - alimentar o Contest Registry.
 
-Campos usados por cliente público:
+**OBSERVADO no POC:** a resposta foi um array de objetos com campos como:
 
 ```text
 testid
+contest
+dat
+startday
+starttime
+finishday
+finishtime
 name
-startdate
-enddate
+scores
+catcount
+annlink
 ```
 
-Exemplo conceitual:
+**NÃO RESOLVIDO:** não foram observados os campos `startdate` ou `enddate`.
+O significado exato de `dat`, o ano representado e o timezone dos campos de
+dia/hora permanecem desconhecidos. Logo, discovery não pode derivar uma janela
+absoluta de atividade deste endpoint.
+
+Exemplo observado, reduzido:
 
 ```json
 [
   {
-    "testid": 40,
-    "name": "General QSO Test",
-    "startdate": "...",
-    "enddate": "..."
+    "testid": 108,
+    "contest": "DARC-WAEDC-SSB",
+    "dat": 902,
+    "startday": 6,
+    "starttime": "00:00:00",
+    "finishday": 7,
+    "finishtime": "23:59:59",
+    "name": "WAE DX SSB"
   }
 ]
 ```
-
-O exemplo acima é apenas ilustrativo; o formato exato de datas deve ser capturado numa POC real.
 
 ---
 
 ### 3.2. Contests por mês
 
-**Status: CONFIRMADO em código cliente público**
+**CONFIRMADO:** o POC recebeu `200 application/json` de `/month/9`.
 
 ```http
 GET https://contest.run/api/contest/month/{month}
@@ -104,7 +130,7 @@ Uso recomendado no Araucaria:
 - descoberta de múltiplos contests no mesmo período;
 - redução do risco de perder um evento por depender de uma única lista.
 
-Pendente:
+**NÃO RESOLVIDO:**
 
 - confirmar semântica exata do parâmetro `month`;
 - confirmar se o endpoint depende do ano atual;
@@ -114,7 +140,7 @@ Pendente:
 
 ### 3.3. Categorias de um contest
 
-**Status: CONFIRMADO**
+**CONFIRMADO:** o POC recebeu `200 application/json` para os `testid` 108 e 91.
 
 ```http
 GET https://contest.run/api/category/contest/{testid}
@@ -131,6 +157,8 @@ Campos observados:
 ```text
 catid
 testid
+ctdom
+ct-dom
 ctoper
 ctwac
 cttrans
@@ -154,6 +182,12 @@ ct-overl
 ct-time
 ```
 
+**OBSERVADO:** cada linha combina códigos numéricos (`ctoper`, `ctband` etc.)
+com labels (`ct-oper`, `ct-band` etc.). Foram observados `-1`, strings vazias e
+`null`; `ctdom`/`ct-dom` foram `null` em todas as três linhas de 108 e
+misturaram `null` e string nas quinze linhas de 91. Esses valores não têm
+semântica canônica confirmada.
+
 Uso no Araucaria:
 
 - mapear categorias do contest;
@@ -166,7 +200,7 @@ As categorias não precisam ser consultadas a cada poll de score.
 
 ### 3.4. Scoreboard / displayscore
 
-**Status: CONFIRMADO**
+**CONFIRMADO:** o POC recebeu `200 application/json` para os `testid` 108 e 91.
 
 ```http
 GET https://contest.run/api/displayscore/{testid}
@@ -182,18 +216,24 @@ Este é o endpoint principal para o External Collector.
 
 Um cliente público já usa esse endpoint em polling periódico e processa a resposta como JSON.
 
+**OBSERVADO:** a resposta foi um array com 93 linhas para 108 e 2 para 91. Uma
+linha pode conter timestamp histórico; em 91 foram observadas datas de
+2026-07-19 e 2026-09-09. A presença de uma estação em `displayscore` não prova
+que ela esteja ativa no momento da leitura. Freshness deve ser calculada pelo
+timestamp da própria linha.
+
 ---
 
 ## 4. Schema observado de `displayscore`
 
-Campos identificados no modelo do cliente público:
+Campos observados no cliente público e confirmados pelo POC:
 
 ```text
 auth
 ctassis
 ctband
 ctmode
-ctopera
+ctoper
 ctoverl
 ctpwr
 ctstatn
@@ -235,6 +275,9 @@ q20
 q40
 q80
 qtotal
+qtotalc
+qtotalp
+qtotalr
 
 rownum
 score
@@ -244,6 +287,10 @@ wac
 waz
 ```
 
+`auth` deve ser tratado como potencialmente sensível e nunca sair da fronteira
+do adapter. `soft` foi observado como string e número. Tipos externos precisam
+ser validados antes da normalização.
+
 ---
 
 ## 5. Mapeamento principal para o modelo canônico
@@ -252,7 +299,7 @@ waz
 contest.run        Araucaria
 -----------        ---------
 sign            → callsign
-date            → source_timestamp
+date            → candidato a source_timestamp, com timezone não confirmado
 score           → score
 
 qtotal          → qso_total
@@ -274,8 +321,12 @@ waz             → cq_zone
 itu             → iaru_zone
 lat             → latitude
 lon             → longitude
-soft            → logger
+soft            → metadado raw de software, após normalização de tipo
 ```
+
+`qtotal`, `ptotal` e `mtotal` são os totais autoritativos retornados pela
+fonte. O POC observou linhas em que não coincidem com a soma do breakdown por
+banda; nunca recomputá-los localmente a partir dessas bandas.
 
 A normalização oficial é definida em:
 
@@ -365,13 +416,17 @@ normalizar apenas significado conhecido
 
 ## 9. Timestamp
 
-O cliente público trata `date` como:
+**OBSERVADO no POC:** `date` usa o formato:
 
 ```text
 YYYY-MM-DD HH:MM:SS
 ```
 
- e o interpreta como UTC.
+sem offset ou identificador de timezone. O cliente público aparenta tratá-lo
+como UTC, mas isso é apenas uma inferência de cliente, não um contrato da fonte.
+
+**NÃO RESOLVIDO:** o timezone oficial de `date` precisa de validação antes de
+o adapter criar um `source_timestamp` UTC definitivo.
 
 No Araucaria devem existir dois horários:
 
@@ -420,7 +475,8 @@ collector-architecture.md
 
 ## 11. Coleta de todos os contests ativos
 
-O Araucaria não deve selecionar apenas um `testid`.
+O Araucaria não deve selecionar apenas um `testid`, mas discovery do
+`contest.run` hoje fornece candidatos, não uma prova de atividade absoluta.
 
 Fluxo:
 
@@ -429,7 +485,7 @@ GET /api/contest/nearest
 GET /api/contest/month/{month}
         │
         ▼
-identificar contests ativos
+registrar candidatos descobertos
         │
         ├── testid 41
         ├── testid 52
@@ -444,6 +500,9 @@ GET /api/displayscore/88
 ```
 
 A coleta deve continuar independentemente do contest selecionado no frontend.
+**NÃO RESOLVIDO:** até confirmar a semântica de calendário, a produção não deve
+agendar polling de "contests ativos" usando uma interpretação adivinhada de
+`dat`, `startday` ou `finishday`.
 
 ---
 
@@ -518,15 +577,15 @@ Accept: application/json
 
 Evitar impersonação desnecessária se a API aceitar um cliente HTTP normal.
 
-TODO:
-
-- testar resposta com User-Agent simples do Araucaria.
+**CONFIRMADO:** o POC usou `Accept: application/json` e um `User-Agent`
+identificável do Araucaria e recebeu respostas JSON bem-sucedidas.
 
 ---
 
 ## 16. Autenticação da API de leitura
 
-**Status observado:** o cliente público consulta os endpoints GET sem credenciais explícitas.
+**CONFIRMADO no POC:** os seis `GET` requests foram concluídos sem credenciais
+explícitas.
 
 Portanto, a hipótese atual é:
 
@@ -534,10 +593,8 @@ Portanto, a hipótese atual é:
 read API pública
 ```
 
-TODO:
-
-- validar diretamente todos os endpoints;
-- confirmar se há restrições por IP, sessão ou headers.
+**NÃO RESOLVIDO:** não há confirmação de política de acesso, restrições por IP,
+sessão ou headers além da amostra limitada do POC.
 
 ---
 
@@ -760,24 +817,39 @@ trends
 
 ---
 
-## 27. Pontos ainda pendentes de engenharia reversa / teste
+## 27. Classificação após o POC baseline
 
-```text
-[ ] formato real completo de /contest/nearest
-[ ] formato real completo de /contest/month/{month}
-[ ] timezone oficial das datas
-[ ] comportamento quando contest termina
-[ ] rate limits oficiais
-[ ] headers mínimos necessários
-[ ] ETag / Last-Modified / cache headers
-[ ] paginação, se existir
-[ ] significado de todos os campos m*total
-[ ] semântica completa dos campos ct*
-[ ] endpoint oficial atual de POST
-[ ] HTTPS versus HTTP na escrita
-[ ] autenticação e credenciais de escrita
-[ ] códigos de resposta de POST
-```
+### CONFIRMADO
+
+- os quatro endpoints de leitura documentados responderam `200 application/json`
+  na amostra do POC;
+- discovery retornou `testid` utilizável para solicitar categorias e scores;
+- as leituras funcionaram com `Accept: application/json`, User-Agent
+  identificável e sem credenciais explícitas nesta amostra.
+
+### OBSERVADO
+
+- discovery retornou `dat`, dias e horários, sem `startdate`/`enddate`;
+- categorias incluem códigos, labels e sentinelas;
+- `displayscore` é um array de snapshots agregados, com linhas históricas;
+- `soft` variou entre string e número e `auth` estava presente como campo;
+- os totais e os breakdowns por banda nem sempre reconciliaram.
+
+### INFERIDO
+
+- `qtotal`, `ptotal` e `mtotal` devem permanecer autoritativos em vez de serem
+  recalculados a partir das bandas;
+- presença de uma linha deve ser separada da classificação de freshness/live.
+
+### NÃO RESOLVIDO
+
+- semântica de `dat`, ano, timezone e janelas absolutas de contest;
+- timezone oficial de `date`;
+- semântica de `qtotalc`, `qtotalp`, `qtotalr`, campos `m*total` e campos `ct*`;
+- comportamento no término do contest e ciclo de vida de linhas stale;
+- rate limits, headers mínimos, ETag/cache e paginação;
+- endpoint atual de POST, HTTPS versus HTTP de escrita, credenciais e respostas
+  de escrita.
 
 ---
 

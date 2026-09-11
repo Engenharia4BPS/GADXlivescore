@@ -269,6 +269,24 @@ Não usar floating point.
 
 ---
 
+### 12.1. Totais e breakdown do `contest.run`
+
+O POC read-only de 2026-09-11 observou linhas em que os totais agregados não
+coincidem com a soma dos campos por banda. Portanto:
+
+```text
+qtotal / ptotal / mtotal da fonte são autoritativos
+```
+
+O normalizer nunca deve recomputar esses totais a partir de `q160...q10`,
+`p160...p10` ou `m160...m10`.
+
+Os campos por banda são observações suplementares de breakdown e devem ser
+preservados como tal. Divergência entre total e breakdown não é, por si só, erro
+de parsing ou motivo para alterar qualquer um dos valores.
+
+---
+
 ## 13. Bandas
 
 Formato canônico:
@@ -349,6 +367,11 @@ time_category
 
 Também preservar `category_raw` ou `category_json`.
 
+No `contest.run`, o POC observou códigos numéricos junto de labels de exibição,
+além de sentinelas como `-1`, strings vazias e `null`. O adapter deve preservar
+essas diferenças na fronteira da fonte. Não converter sentinelas para uma
+categoria canônica, `null` ou zero antes de a regra do campo ser confirmada.
+
 ---
 
 ## 17. Breakdown por banda
@@ -378,25 +401,41 @@ Não forçar tudo para `mult_total`. Usar `metrics JSON` ou futuramente `snapsho
 
 ## 19. `contest.run` → modelo canônico
 
-Mapeamento identificado:
+Mapeamento observado, sujeito à validação da semântica de cada campo:
 
 ```text
 sign    → callsign
 date    → source_timestamp
 score   → score
-qtotal  → qso_total
-ptotal  → points_total
-mtotal  → mult_total
+qtotal  → qso_total autoritativo da fonte
+ptotal  → points_total autoritativo da fonte
+mtotal  → mult_total autoritativo da fonte
 q160... → qso por banda
 p160... → points por banda
 m160... → mult por banda
-soft    → logger
+soft    → metadado de software bruto; observado como string e número
 dxcc    → dxcc
 waz     → cq_zone
 itu     → iaru_zone
 lat     → latitude
 lon     → longitude
 ```
+
+O valor de `date` observado está no formato `YYYY-MM-DD HH:MM:SS`, sem offset.
+O adapter deve preservar o valor bruto e a ausência de timezone até que a
+semântica temporal seja confirmada.
+
+`qtotalc`, `qtotalp` e `qtotalr` foram observados como números, mas sua
+semântica não foi confirmada. No MVP, devem permanecer métricas raw sem
+mapeamento canônico.
+
+### 19.1. Tipos externos instáveis
+
+Schemas externos não são contratos internos. O adapter valida e normaliza tipos
+na fronteira antes de produzir um `CanonicalScoreSnapshot`. O POC observou
+`soft` como string e número; o adapter deve aceitar ambas as formas e preservar
+o valor raw quando relevante. O mesmo princípio se aplica a campos futuros que
+mudem de tipo, sejam ausentes ou usem sentinelas.
 
 ---
 

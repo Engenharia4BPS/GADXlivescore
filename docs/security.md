@@ -448,6 +448,24 @@ Regras:
 - política de retenção;
 - criptografia de disco/backup conforme infraestrutura disponível.
 
+### 26.1. Campo externo `auth`
+
+O POC do `contest.run` observou um campo de payload chamado `auth`. Sua
+semântica não foi confirmada; até prova contrária, ele deve ser tratado como
+potencialmente sensível.
+
+No MVP:
+
+- nunca registrar `auth` em logs;
+- nunca expor `auth` por API interna, pública ou administrativa;
+- nunca incluí-lo em fixtures, relatórios de observação ou artefatos commitados;
+- redigi-lo antes de persistir payload externo em `raw_messages`;
+- quando integridade de auditoria for necessária, reter o hash do payload
+  original antes da redação, não o valor de `auth`.
+
+Essa política aplica-se mesmo que o restante do payload seja publicamente
+acessível.
+
 ---
 
 ## 27. Source priority e spoofing

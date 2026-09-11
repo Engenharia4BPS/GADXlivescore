@@ -1,0 +1,20 @@
+{
+  "name": "araucaria-livescore",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "check": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "poc:contest-run": "tsx tools/contest-run-poc/src/index.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.1.4",
+    "tsx": "4.20.3"
+  }
+}
