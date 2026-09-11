@@ -52,6 +52,38 @@ Essa evidência confirma a disponibilidade daqueles paths naquele instante; não
 congela o schema nem a política operacional futura do serviço. O resumo seguro
 para revisão fica em `docs/observations/contest-run/2026-09-11-baseline.md`.
 
+### 2.2. Evidência do POC Phase 0.7
+
+Em 2026-09-11, um segundo POC read-only executou nove `GET` requests: discovery
+em `nearest` e nos meses 8, 9 e 10, `displayscore` dos `testid` 108 e 91
+selecionados deterministicamente, e uma segunda leitura dos mesmos paths após
+15 minutos. Todos responderam `200 application/json`, sem redirect, retry,
+cache ou headers de rate limit observados. O resumo sanitizado fica em
+`docs/observations/contest-run/2026-09-11-phase-0-7.md`.
+
+**OBSERVADO:** nos endpoints mensais, `dat` apareceu nas faixas:
+
+```text
+agosto     801..805
+setembro   901..904
+outubro   1001..1004
+```
+
+Isto suporta uma estrutura de mês mais slot, mas **não** estabelece a semântica
+exata de `MMWW`, o ano de referência, nem a interpretação de calendário do
+slot. `startday` e `finishday` continuaram compatíveis tanto com números de dia
+da semana quanto com dias iniciais do mês.
+
+**OBSERVADO:** `/nearest` permaneceu idêntico na janela de 15 minutos. Sua
+semântica precisa - próximos, ativos ou janela deslizante mais ampla - continua
+**NÃO RESOLVIDA**.
+
+**OBSERVADO:** uma linha de `displayscore` pode avançar seu timestamp sem mudar
+score, QSO, multiplicadores ou breakdown por banda. Reciprocamente, score, QSO,
+multiplicadores e valores por banda podem diminuir ou sofrer reset. Logo,
+presença de linha não implica atividade e métricas competitivas não devem ser
+tratadas como monotônicas.
+
 ---
 
 ## 3. Endpoints de leitura identificados

@@ -384,6 +384,22 @@ estação deve ser calculada a partir do `source_timestamp` da própria linha, c
 fallback explícito apenas quando necessário; a presença da linha não deve criar
 ou prolongar atividade por si só.
 
+### 12.1. Sinais distintos de estado da fonte
+
+O collector deve registrar estes quatro conceitos separadamente:
+
+| Sinal | Definição |
+| --- | --- |
+| `PRESENT` | A linha existe na resposta da fonte. |
+| `FRESH` | O timestamp da fonte está dentro do limiar configurado de freshness. |
+| `REPORTING` | O timestamp da fonte avançou em relação à observação aceita anterior. |
+| `SCORING` | Uma ou mais métricas competitivas mudaram. |
+
+Nenhum desses sinais implica automaticamente qualquer outro. Uma linha pode ser
+`PRESENT` e stale; `REPORTING` sem `SCORING` quando apenas o timestamp muda; ou
+`SCORING` com uma correção negativa. A classificação canônica e a apresentação
+operacional devem preservar essa distinção.
+
 ---
 
 ## 13. Categorias

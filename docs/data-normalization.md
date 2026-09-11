@@ -285,6 +285,14 @@ Os campos por banda são observações suplementares de breakdown e devem ser
 preservados como tal. Divergência entre total e breakdown não é, por si só, erro
 de parsing ou motivo para alterar qualquer um dos valores.
 
+### 12.2. Reduções e resets observados
+
+O POC Phase 0.7 de 2026-09-11 observou score, QSO, multiplicadores e valores
+por banda diminuírem ou sofrerem reset entre duas observações da mesma fonte.
+Esses valores são evidência de origem válida: o normalizer não deve rejeitá-los,
+reescrevê-los, nem forçá-los a permanecer monotônicos. A classificação de
+correção/reset pertence ao analytics e preserva ambos os snapshots.
+
 ---
 
 ## 13. Bandas

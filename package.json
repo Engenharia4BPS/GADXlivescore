@@ -11,7 +11,8 @@
     "check": "biome check .",
     "format": "biome format --write .",
     "typecheck": "corepack pnpm -r --if-present typecheck",
-    "poc:contest-run": "tsx tools/contest-run-poc/src/index.ts"
+    "poc:contest-run": "tsx tools/contest-run-poc/src/index.ts",
+    "poc:contest-run:phase-0-7": "tsx tools/contest-run-poc/src/phase-0-7.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.1.4",

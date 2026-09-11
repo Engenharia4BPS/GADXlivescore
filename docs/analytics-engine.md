@@ -788,6 +788,20 @@ anomaly = COUNTER_DECREASE
 
 Não corrigir silenciosamente.
 
+Contadores competitivos - score, QSO, multiplicadores e valores por banda - não
+são garantidamente monotônicos. Deltas negativos são observações válidas e
+resets ou correções devem permanecer na sequência canônica.
+
+Se uma janela de rate incluir redução ou reset de contador, a taxa deve receber
+um status anômalo, por exemplo:
+
+```text
+rate_status = ANOMALO_RESET_OU_CORRECAO
+```
+
+O engine não deve substituir o delta negativo por zero. Uma atualização apenas
+de timestamp também não cria atividade de QSO, score, multiplicador ou banda.
+
 ---
 
 ## 35. Mudança de fonte
