@@ -11,9 +11,28 @@ importers:
       '@biomejs/biome':
         specifier: 2.1.4
         version: 2.1.4
+      dbmate:
+        specifier: 2.35.1
+        version: 2.35.1
       tsx:
         specifier: 4.20.3
         version: 4.20.3
+
+  packages/database:
+    dependencies:
+      kysely:
+        specifier: 0.29.5
+        version: 0.29.5
+      mysql2:
+        specifier: 3.24.4
+        version: 3.24.4(@types/node@22.15.30)
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
 
   packages/source-adapters:
     devDependencies:
@@ -33,6 +52,25 @@ importers:
       tsx:
         specifier: 4.20.3
         version: 4.20.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  tools/percona57-validation:
+    dependencies:
+      '@araucaria/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      kysely:
+        specifier: 0.29.5
+        version: 0.29.5
+      mysql2:
+        specifier: 3.24.4
+        version: 3.24.4(@types/node@22.15.30)
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
       typescript:
         specifier: 5.8.3
         version: 5.8.3
@@ -89,6 +127,41 @@ packages:
   '@biomejs/cli-win32-x64@2.1.4':
     resolution: {integrity: sha512-tBc+W7anBPSFXGAoQW+f/+svkpt8/uXfRwDzN1DvnatkRMt16KIYpEi/iw8u9GahJlFv98kgHcIrSsZHZTR0sw==}
     engines: {node: '>=14.21.3'}
+    cpu: [x64]
+    os: [win32]
+
+  '@dbmate/darwin-arm64@2.35.1':
+    resolution: {integrity: sha512-M63uycMI/sBHdjlf9NOn3YO2rKz4m3gLo/1kJ2QceODO724nZ4hJbsyfVHTpKpuHd6lct4+Vnhuqfz7lS9dKhg==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@dbmate/darwin-x64@2.35.1':
+    resolution: {integrity: sha512-03QeOqT/RZZhX+v1B2+pkd6HPhSeAjz43LOm7ljylKP/D+/VKbg1QkxAcehsO20i3s7hIxH9+I/WmPyffRwMxw==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@dbmate/linux-arm64@2.35.1':
+    resolution: {integrity: sha512-GqK2KVT2jbSe5vM16oHMpi0v6nvDwgeoM6M8k1XFV/RB1rfuG/33BMzTbgIsV91jLjed0PMeiQVvgWr41Se9Jg==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@dbmate/linux-arm@2.35.1':
+    resolution: {integrity: sha512-LOhSMHzTKcy5KbsFYsQnY36B6GLS6xH8BiBSaI84vTkwmbezggDIzGbZ4Eq+FCD9eMS7lLfmpmoOZoLrwbb3IQ==}
+    cpu: [arm]
+    os: [linux]
+
+  '@dbmate/linux-ia32@2.35.1':
+    resolution: {integrity: sha512-e38FzTUdraDS2tdI34QHr8Gf68TOS8dPsVdfrl+y7La2hSn8UIMtQ43cMaExTyHo6uZ9mFKUeIxgwVgAxDrQbQ==}
+    cpu: [ia32]
+    os: [linux]
+
+  '@dbmate/linux-x64@2.35.1':
+    resolution: {integrity: sha512-gdr9Q6vMMUaNYz8fv64oNSuoHYLjpeuZjahY6J7Dy4c6wQVcfLs7t3aiBCBxlvVkjJJIr5Ig3ApwqC0V2IojQA==}
+    cpu: [x64]
+    os: [linux]
+
+  '@dbmate/win32-x64@2.35.1':
+    resolution: {integrity: sha512-1pP+/oDEeOLvrvPdirM8VIi/+8v8Qf9fDOpNo3nRslQPaoOTJKsMaVLr5b5Ba/UrOisFYJmLKslgWvvjGAY7wg==}
     cpu: [x64]
     os: [win32]
 
@@ -251,6 +324,14 @@ packages:
   '@types/node@22.15.30':
     resolution: {integrity: sha512-6Q7lr06bEHdlfplU6YRbgG1SFBdlsfNC4/lX+SkhiTs0cpJkOElmWls8PxDFv4yY/xKb8Y6SO0OmSX4wgqTZbA==}
 
+  aws-ssl-profiles@1.1.2:
+    resolution: {integrity: sha512-NZKeq9AfyQvEeNlN0zSYAaWrmBffJh3IELMZfRpJVWgrpEbtEpnjvzqBPf+mxoI287JohRDoa+/nsfqqiZmF6g==}
+    engines: {node: '>= 6.0.0'}
+
+  dbmate@2.35.1:
+    resolution: {integrity: sha512-TGhNRbSnlLeLjpV/m4uHJSwZhsJZEeE+IIl98UYbb6s63j1ZsPY6XuVWL6pl3YYyfupVh7pAye6iuOAYf3Maxw==}
+    hasBin: true
+
   esbuild@0.25.12:
     resolution: {integrity: sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==}
     engines: {node: '>=18'}
@@ -261,11 +342,49 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  generate-function@2.3.1:
+    resolution: {integrity: sha512-eeB5GfMNeevm/GRYq20ShmsaGcmI81kIX2K9XQx5miC8KdHaC6Jm0qQ8ZNeGOi7wYB8OsdxKs+Y2oVuTFuVwKQ==}
+
   get-tsconfig@4.14.3:
     resolution: {integrity: sha512-++QEw4DIY7WGoukz+/+A/8dGYPT9l9yIadnmSgZ8Rjr3YVSVDipQSO9CdnJo9ePqFqUUqh+wk9uIaoiAwsiPkA==}
 
+  iconv-lite@0.7.3:
+    resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
+    engines: {node: '>=0.10.0'}
+
+  is-property@1.0.2:
+    resolution: {integrity: sha512-Ks/IoX00TtClbGQr4TWXemAnktAQvYB7HzcCxDGqEZU6oCmb2INHuOoKxbtR+HFkmYWBKv/dOZtGRiAjDhj92g==}
+
+  kysely@0.29.5:
+    resolution: {integrity: sha512-ooa+eSbBNPTo3MycPEuW5jdrxQdQwdtB3LC3h43FiXQbIry5tR0C5lDG7eealK0E4D7XjrnOP5DIUg/LyjRMYQ==}
+    engines: {node: '>=22.0.0'}
+
+  long@5.3.2:
+    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
+
+  lru.min@1.1.5:
+    resolution: {integrity: sha512-5J9ysMYUpYIg9RF2vJpy9SinEmSviFSe0GyPpCQ4L5QSkLAgeLXlTAOu2ZwWUU5m+0SBl6gUU1R1ZQB3aKypfA==}
+    engines: {bun: '>=1.0.0', deno: '>=1.30.0', node: '>=8.0.0'}
+
+  mysql2@3.24.4:
+    resolution: {integrity: sha512-A2olluVlj0mvgyIRRISMEzXc51m+21mRtcMVjJyIpt2GG98+XrC9m9HzsqcMsX2LcnfccJvY5NB22g8fENBnOA==}
+    engines: {node: '>= 8.0'}
+    peerDependencies:
+      '@types/node': '>= 8'
+
+  named-placeholders@1.1.6:
+    resolution: {integrity: sha512-Tz09sEL2EEuv5fFowm419c1+a/jSMiBjI9gHxVLrVdbUkkNUUfjsVYs9pVZu5oCon/kmRh9TfLEObFtkVxmY0w==}
+    engines: {node: '>=8.0.0'}
+
   resolve-pkg-maps@1.0.0:
     resolution: {integrity: sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw==}
+
+  safer-buffer@2.1.2:
+    resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
+
+  sql-escaper@1.5.1:
+    resolution: {integrity: sha512-4toX5E1fQbBrpfXidaHnF0669nkAdETeIPTs2SUjxxD7RRIs9ICG4gtpmfc68JCEKehsdwLFqBu9VlQqZ1P1gg==}
+    engines: {bun: '>=1.0.0', deno: '>=2.0.0', node: '>=12.0.0'}
 
   tsx@4.20.3:
     resolution: {integrity: sha512-qjbnuR9Tr+FJOMBqJCW5ehvIo/buZq7vH7qD7JziU98h6l3qGy0a/yPFjwO+y0/T7GFpNgNAvEcPPVfyT8rrPQ==}
@@ -315,6 +434,27 @@ snapshots:
     optional: true
 
   '@biomejs/cli-win32-x64@2.1.4':
+    optional: true
+
+  '@dbmate/darwin-arm64@2.35.1':
+    optional: true
+
+  '@dbmate/darwin-x64@2.35.1':
+    optional: true
+
+  '@dbmate/linux-arm64@2.35.1':
+    optional: true
+
+  '@dbmate/linux-arm@2.35.1':
+    optional: true
+
+  '@dbmate/linux-ia32@2.35.1':
+    optional: true
+
+  '@dbmate/linux-x64@2.35.1':
+    optional: true
+
+  '@dbmate/win32-x64@2.35.1':
     optional: true
 
   '@esbuild/aix-ppc64@0.25.12':
@@ -399,6 +539,18 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  aws-ssl-profiles@1.1.2: {}
+
+  dbmate@2.35.1:
+    optionalDependencies:
+      '@dbmate/darwin-arm64': 2.35.1
+      '@dbmate/darwin-x64': 2.35.1
+      '@dbmate/linux-arm': 2.35.1
+      '@dbmate/linux-arm64': 2.35.1
+      '@dbmate/linux-ia32': 2.35.1
+      '@dbmate/linux-x64': 2.35.1
+      '@dbmate/win32-x64': 2.35.1
+
   esbuild@0.25.12:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.25.12
@@ -431,11 +583,46 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  generate-function@2.3.1:
+    dependencies:
+      is-property: 1.0.2
+
   get-tsconfig@4.14.3:
     dependencies:
       resolve-pkg-maps: 1.0.0
 
+  iconv-lite@0.7.3:
+    dependencies:
+      safer-buffer: 2.1.2
+
+  is-property@1.0.2: {}
+
+  kysely@0.29.5: {}
+
+  long@5.3.2: {}
+
+  lru.min@1.1.5: {}
+
+  mysql2@3.24.4(@types/node@22.15.30):
+    dependencies:
+      '@types/node': 22.15.30
+      aws-ssl-profiles: 1.1.2
+      generate-function: 2.3.1
+      iconv-lite: 0.7.3
+      long: 5.3.2
+      lru.min: 1.1.5
+      named-placeholders: 1.1.6
+      sql-escaper: 1.5.1
+
+  named-placeholders@1.1.6:
+    dependencies:
+      lru.min: 1.1.5
+
   resolve-pkg-maps@1.0.0: {}
+
+  safer-buffer@2.1.2: {}
+
+  sql-escaper@1.5.1: {}
 
   tsx@4.20.3:
     dependencies:

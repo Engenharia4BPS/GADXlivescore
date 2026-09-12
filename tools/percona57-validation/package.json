@@ -1,0 +1,18 @@
+{
+  "name": "@araucaria/percona57-validation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@araucaria/database": "workspace:*",
+    "kysely": "0.29.5",
+    "mysql2": "3.24.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "typescript": "5.8.3"
+  }
+}

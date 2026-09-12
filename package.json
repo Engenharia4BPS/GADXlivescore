@@ -11,11 +11,18 @@
     "check": "biome check .",
     "format": "biome format --write .",
     "typecheck": "corepack pnpm -r --if-present typecheck",
+    "db:migrate": "dbmate --migrations-dir database/migrations --no-dump-schema up",
+    "db:migrate:down": "dbmate --migrations-dir database/migrations --no-dump-schema down",
+    "db:migrate:status": "dbmate --migrations-dir database/migrations --no-dump-schema status",
+    "db:percona57:preflight": "tsx tools/percona57-validation/src/preflight.ts",
+    "db:percona57:validate": "tsx tools/percona57-validation/src/index.ts",
+    "db:percona57:integration": "tsx tools/percona57-validation/src/integration.ts",
     "poc:contest-run": "tsx tools/contest-run-poc/src/index.ts",
     "poc:contest-run:phase-0-7": "tsx tools/contest-run-poc/src/phase-0-7.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.1.4",
+    "dbmate": "2.35.1",
     "tsx": "4.20.3"
   }
 }
