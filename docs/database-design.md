@@ -149,11 +149,32 @@ corepack.cmd pnpm run db:percona57:validate
 
 The integration validation must be run against an actual disposable Percona 5.7 instance before a migration is approved for production. No migration command changes server-global variables.
 
-### Pending Live Percona 5.7 Validation
+### Real Percona 5.7 Validation
 
-`LIVE_PERCONA57_INTEGRATION_VALIDATION_PENDING`
+The following results were observed on the actual Percona Server 5.7.44-48, Release 48 target environment using only `dxarauca_livescore_test`; they are not inferred from static DDL inspection. The host-side server default charset/collation is `utf8`/`utf8_unicode_ci` and its `SYSTEM` timezone is `-03`. Application connections must still set the session timezone to `+00:00`, and every application table explicitly uses `utf8mb4`/`utf8mb4_unicode_ci`.
 
-Phase 1 is provisionally accepted after manual confirmation on the designated test server of Percona Server 5.7.44-48, `utf8mb4`, `utf8mb4_unicode_ci`, UTC session time zone, the required strict SQL mode, `innodb_strict_mode = 1`, and the production/test database guard. The following real-server checks remain mandatory and must not be weakened or removed: dbmate migration up/down, schema validation after migration, and behavioral integration validation A-N.
+Structural validation passed: migration up succeeded; all 14 expected tables were created with InnoDB and `utf8mb4_unicode_ci`; 25 foreign keys were observed; and every observed foreign key uses `DELETE RESTRICT` / `UPDATE RESTRICT`.
+
+Behavioral validation passed:
+
+- Normal accepted snapshots, timestamp-only updates, and a single raw batch producing multiple accepted snapshots.
+- The DM7EE-style resets `36594 -> 0` score, `342 -> 0` QSO, and `107 -> 0` multiplier, preserved unchanged.
+- Source-authoritative aggregate totals that differ from supplemental band sums.
+- Matching `canonical_score_events` / `current_scores` pointers.
+- An `OUT_OF_ORDER` `score_snapshot_flags` diagnostic appended without mutating the snapshot.
+
+Negative integrity validation passed:
+
+- `1062 ER_DUP_ENTRY` on `uq_score_snapshots_entry_source_fingerprint` for an exact normalized fingerprint duplicate.
+- `1452 ER_NO_REFERENCED_ROW_2` on `fk_current_scores_canonical_event` for a mismatched current-score canonical tuple.
+- `1452 ER_NO_REFERENCED_ROW_2` on `fk_entries_current_category_contest` and `fk_score_snapshots_category_contest` for cross-contest category references.
+- `1451 ER_ROW_IS_REFERENCED_2` on `fk_contest_categories_contest` when deleting a parent contest with dependent history.
+
+Fixture cleanup was confirmed: `PHASE2B_TEST` source, contest, and entry counts are all zero.
+
+`MYSQL_ADVISORY_LOCK_CONCURRENCY_VALIDATION_PENDING`
+
+The remaining real-server validation is a two-simultaneous-application-connection check of environment-scoped `GET_LOCK` ownership, blocking, and release behavior. Advisory-lock validation has not yet passed.
 
 ### Local Percona 5.7 Integration
 
