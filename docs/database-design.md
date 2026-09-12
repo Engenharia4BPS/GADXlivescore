@@ -101,6 +101,12 @@ Receipt and normalization are deliberately separated:
 
 The raw receipt row is the only mutable record in the first two boundaries. Snapshots, band rows, snapshot flags, and canonical events are append-only.
 
+## Phase 2A Ingestion Write Path
+
+`@araucaria/collector-ingestion` persists a source-neutral receipt first, calculating its original SHA-256 before recursively removing sensitive payload and HTTP metadata keys. It then claims the receipt and parses a batch independently: malformed rows are recorded as rejected while valid rows continue. An entirely invalid batch is `FAILED`; a mixed batch is `PARTIAL`.
+
+Each valid observation resolves the established `(contest_id, normalized_callsign)` entry identity, validates any category against the same contest, and creates an append-only snapshot. The fingerprint is SHA-256 over deterministic UTF-8 JSON with sorted object keys and sorted `(band, mode)` rows. It includes source/contest/entry identity, category and timestamp evidence, authoritative aggregate metrics, explicitly admitted source evidence, and bands; it excludes raw/unmapped metadata, receipt and HTTP transport data, processing/retry/collector-run data, and redaction bookkeeping. A normal insert treats only `ER_DUP_ENTRY`/1062 for `uq_score_snapshots_entry_source_fingerprint` as a duplicate; every other database error aborts the transaction. Aggregate totals are never recomputed from supplemental band rows. Canonical selection and `current_scores` are intentionally untouched.
+
 ## Canonical Timeline And Current Projection
 
 Reconciliation evaluates source precedence, freshness, completeness, source health, and the application-configured reconciliation window. Source precedence is `DIRECT LOGGER > FEDERATION > EXTERNAL SERVER > MANUAL`, but precedence alone does not select an incomplete or unhealthy observation.

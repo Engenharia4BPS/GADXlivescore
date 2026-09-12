@@ -18,6 +18,28 @@ importers:
         specifier: 4.20.3
         version: 4.20.3
 
+  packages/collector-ingestion:
+    dependencies:
+      '@araucaria/database':
+        specifier: workspace:*
+        version: link:../database
+      '@araucaria/source-adapters':
+        specifier: workspace:*
+        version: link:../source-adapters
+      kysely:
+        specifier: 0.29.5
+        version: 0.29.5
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.30
+        version: 22.15.30
+      tsx:
+        specifier: 4.20.3
+        version: 4.20.3
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   packages/database:
     dependencies:
       kysely:
