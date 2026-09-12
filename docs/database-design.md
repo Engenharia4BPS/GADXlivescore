@@ -172,9 +172,7 @@ Negative integrity validation passed:
 
 Fixture cleanup was confirmed: `PHASE2B_TEST` source, contest, and entry counts are all zero.
 
-`MYSQL_ADVISORY_LOCK_CONCURRENCY_VALIDATION_PENDING`
-
-The remaining real-server validation is a two-simultaneous-application-connection check of environment-scoped `GET_LOCK` ownership, blocking, and release behavior. Advisory-lock validation has not yet passed.
+Real application connectivity and advisory-lock validation also passed on the target: `dxarauca_livescore_test` on Percona Server `5.7.44-48`, `Percona Server (GPL), Release 48, Revision 497f936a373`. The exact test-database guard and UTC session configuration (`+00:00`) were verified. Two distinct pinned physical `mysql2` sessions (connection IDs `5705924` and `5705925`) proved connection-owned `GET_LOCK` behavior: the first acquired the lock, the second observed contention, the first explicitly released it, and the second then acquired and released it. Validator cleanup closed both sessions without application-data DML.
 
 ### Local Percona 5.7 Integration
 

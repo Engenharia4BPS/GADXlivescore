@@ -2,6 +2,7 @@ export {
   configureDatabaseSession,
   createDatabase,
   createDatabaseFromEnvironment,
+  createPhysicalDatabaseConnection,
   REQUIRED_SQL_MODE,
 } from "./client.js";
 export {

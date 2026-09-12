@@ -1,5 +1,11 @@
 import { Kysely, MysqlDialect } from "kysely";
-import { createPool, type Pool, type PoolConnection } from "mysql2/promise";
+import {
+  type Connection,
+  createConnection,
+  createPool,
+  type Pool,
+  type PoolConnection,
+} from "mysql2/promise";
 
 import {
   type DatabaseConfig,
@@ -20,6 +26,23 @@ export function createDatabase(config: DatabaseConfig): Kysely<Database> {
 
 export function createDatabaseFromEnvironment(): Kysely<Database> {
   return createDatabase(databaseConfigFromEnvironment());
+}
+
+/**
+ * Opens one pinned physical session for operations, such as advisory locks,
+ * whose ownership cannot safely move between pooled connections.
+ */
+export async function createPhysicalDatabaseConnection(
+  config: DatabaseConfig,
+): Promise<Connection> {
+  const connection = await createConnection(connectionOptions(config));
+  try {
+    await configureDatabaseSession(connection);
+    return connection;
+  } catch (error) {
+    await connection.end();
+    throw error;
+  }
 }
 
 export async function configureDatabaseSession(
@@ -50,6 +73,10 @@ class SessionBootstrapPool {
 }
 
 function poolOptions(config: DatabaseConfig) {
+  return connectionOptions(config);
+}
+
+function connectionOptions(config: DatabaseConfig) {
   const parsed = new URL(config.databaseUrl);
   return {
     host: parsed.hostname,
