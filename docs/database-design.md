@@ -141,7 +141,60 @@ The collector and analytics layers keep these concepts separate:
 | `REPORTING` | Its source timestamp advanced since the preceding accepted observation. |
 | `SCORING` | One or more competitive metrics changed. |
 
-Presence in contest.run `displayscore` does not prove activity. Freshness defaults and any cross-source reconciliation window are future application configuration, not Phase 2D policy or schema constraints. The collector singleton will acquire an environment-scoped MySQL advisory lock, for example `araucaria_livescore:production:collector`, using a dedicated connection; the schema records the lock name in `collector_runs` but does not attempt to model lock ownership as durable state.
+Presence in contest.run `displayscore` does not prove activity. Freshness defaults and any cross-source reconciliation window are future application configuration, not Phase 2D policy or schema constraints. Each collector mapping acquires its own bounded, environment-scoped MySQL advisory lock, `als:<environment>:csc:<collector_source_contest_id>`, using a dedicated physical connection; the schema records that lock context in `collector_runs` but does not attempt to model lock ownership as durable state.
+
+## Phase 2E.5 Polling Execution Contract
+
+`CollectorPollingService.runCycle` selects only enabled
+`collector_source_contests` whose `next_poll_at` is null or due at the
+application UTC clock. Selection is bounded and ordered deterministically:
+null `next_poll_at` first, then `next_poll_at`, then mapping ID. An enabled
+mapping with a null, zero, or invalid `poll_interval_seconds` is reported as
+`INVALID_CONFIGURATION`; it is not silently assigned a fallback interval.
+
+For each valid mapping, the service opens a pinned mysql2 physical session and
+attempts non-blocking `GET_LOCK(lock_name, 0)`. A losing worker returns
+`LOCKED_BY_OTHER` without an HTTP call, raw receipt, collector-run row, or
+scheduling mutation. Different mapping IDs use different lock names and can
+therefore execute concurrently.
+
+Only a lock owner inserts a `collector_runs` row, initially `RUNNING`, before
+the source HTTP request. The source runner delegates receipt redaction, raw
+receipt durability, normalization, deduplication, and snapshot persistence to
+`CollectorIngestionService`; its receipt carries the source, contest, mapping,
+and collector-run IDs. One displayscore request increments `request_count` by
+one; one durable raw receipt increments `received_message_count` by one, never
+by the number of score rows.
+
+No database transaction is held during HTTP or ingestion. After the source
+operation, one short transaction finalizes `collector_runs` as `SUCCESS` or
+`FAILED` and updates the mapping: success writes `last_success_at`, failure
+writes `last_failure_at`, and both move `next_poll_at` to completion UTC plus
+the configured interval. There is no backoff or retry policy in this phase. A
+release anomaly is surfaced as a sanitized failure and causes a corrective
+failed finalization; locks are always released and sessions closed in `finally`.
+
+### Real Percona 5.7 Polling Validation
+
+The guarded polling harness passed against Percona Server 5.7.44-48 on
+`dxarauca_livescore_test`. It selected a due mapping, acquired its per-mapping
+advisory lock, and finalized one `collector_runs` row from `RUNNING` to
+`SUCCESS`. The run recorded `request_count = 1` and
+`received_message_count = 1`: the latter is one durable HTTP receipt, not five
+score rows. That raw message linked to both its collector run and mapping, and
+five snapshots persisted.
+
+The successful run advanced `last_success_at` and `next_poll_at`. An immediate
+second cycle made zero HTTP requests because the mapping was not due. Explicit
+contention returned `LOCKED_BY_OTHER`; the losing worker made zero HTTP
+requests, created zero `collector_runs`, and did not mutate scheduling. Advisory
+lock release was verified. The persisted contest.run observations remained
+`UNZONED_SOURCE_TEXT` and ineligible for canonical selection, so
+`canonicalEventCount = 0` and `currentScoreCount = 0`. Fixture cleanup verified
+zero remaining rows.
+
+Stale `RUNNING` recovery, abandoned-run recovery after a crash, retry/backoff,
+jitter, and continuous daemon/runtime-loop scheduling remain deferred.
 
 ## Migration And Validation
 

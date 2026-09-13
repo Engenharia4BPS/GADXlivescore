@@ -468,6 +468,41 @@ HTTP GET
 
 ---
 
+### 14.1 Phase 2E.5 bounded polling execution
+
+The implemented reusable cycle is `CollectorPollingService.runCycle`, not a
+long-running daemon. It selects enabled due `collector_source_contests` in
+deterministic order, with a per-cycle maximum. It uses no inferred contest.run
+activity or timestamp semantics.
+
+Each mapping attempts a non-blocking, dedicated-session MySQL advisory lock
+named `als:<environment>:csc:<mapping-id>`. The losing worker reports
+`LOCKED_BY_OTHER` and does not fetch, persist a raw receipt, create a
+`collector_runs` row, or change scheduling. A lock owner creates a `RUNNING`
+run, performs the HTTP/ingestion work outside a long transaction, then
+atomically finalizes the run and updates `last_success_at` or `last_failure_at`
+plus `next_poll_at`. The physical lock is released and its connection closed in
+`finally`.
+
+`request_count` counts source HTTP attempts and `received_message_count` counts
+durable payload receipts, not station rows. Invalid poll intervals are reported
+without an invented fallback.
+
+Real validation against Percona Server 5.7.44-48 passed using
+`dxarauca_livescore_test`: a due mapping acquired its dedicated lock, completed
+one `RUNNING` -> `SUCCESS` run, issued one request, and durably persisted one
+linked raw receipt plus five snapshots. `last_success_at` and `next_poll_at`
+advanced. An immediate cycle made zero HTTP requests because the mapping was
+not due; a separately held lock returned `LOCKED_BY_OTHER` with zero HTTP calls,
+zero collector runs, and no schedule mutation. Lock release and fixture cleanup
+were verified. The five `UNZONED_SOURCE_TEXT` observations remained
+non-canonical (`canonicalEventCount = 0`, `currentScoreCount = 0`).
+
+Stale `RUNNING` recovery, abandoned-run recovery after a crash, retry/backoff,
+jitter, and continuous daemon/runtime-loop scheduling are deferred.
+
+---
+
 ## 15. Raw response
 
 Todo poll deve poder ser auditado.
