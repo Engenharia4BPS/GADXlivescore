@@ -264,6 +264,32 @@ test("discovery service deduplicates by testid, preserves conflicting evidence, 
     result.requests.map((request) => request.endpoint),
     ["nearest", "month", "categories", "categories"],
   );
+  assert.equal(result.requestCount, 4);
+  assert.deepEqual(result.categoryErrors, []);
+});
+
+test("discovery preserves catalog identity when one bounded category request fails", async () => {
+  const service = new ContestRunDiscoveryService(
+    new FakeDiscoveryClient({
+      nearest: [{ testid: 108 }, { testid: 91 }],
+      month: [],
+      categories: new Map([[108, [{ testid: 108, catid: 1 }]]]),
+      failingCategoryTestIds: new Set([91]),
+    }),
+  );
+
+  const result = await service.discover({
+    continueOnCategoryError: true,
+    maxCategoryRequests: 2,
+  });
+
+  assert.equal(result.requestCount, 3);
+  assert.equal(result.contests[0]?.categoryFetchStatus, "FETCHED");
+  assert.equal(result.contests[1]?.categoryFetchStatus, "FAILED");
+  assert.equal(result.contests[1]?.categoryErrorCode, "CATEGORY_NON_2XX");
+  assert.deepEqual(result.categoryErrors, [
+    { testId: 91, code: "CATEGORY_NON_2XX" },
+  ]);
 });
 
 test("discovery leaves dat and contest time fields as raw evidence", async () => {
@@ -320,6 +346,7 @@ interface FakeDiscoveryData {
   nearest: ContestRunDiscoveryRecord[];
   month: ContestRunDiscoveryRecord[];
   categories: Map<number, ContestRunCategoriesResponse["records"]>;
+  failingCategoryTestIds?: ReadonlySet<number>;
 }
 
 class FakeDiscoveryClient implements ContestRunDiscoveryClient {
@@ -340,6 +367,13 @@ class FakeDiscoveryClient implements ContestRunDiscoveryClient {
   async categories(
     testId: number,
   ): Promise<ContestRunHttpResponse<ContestRunCategoriesResponse>> {
+    if (this.data.failingCategoryTestIds?.has(testId)) {
+      throw new ContestRunHttpError({
+        code: "NON_2XX",
+        endpoint: "categories",
+        message: "category request failed",
+      });
+    }
     return response("categories", {
       records: this.data.categories.get(testId) ?? [],
     });

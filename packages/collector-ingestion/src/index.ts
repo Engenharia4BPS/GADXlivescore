@@ -10,6 +10,26 @@ export {
   normalizeContestRunPayload,
   normalizeContestRunRow,
 } from "./contest-run.js";
+export type {
+  CatalogPersistenceInput,
+  CatalogPersistenceResult,
+  CatalogSyncClock,
+  ContestRunCatalogDiscovery,
+  ContestRunCatalogRepository,
+  ContestRunCatalogSource,
+  ContestRunCatalogSyncOptions,
+  ContestRunCatalogSyncOutcome,
+  ContestRunCatalogSyncResult,
+  DiscoveryRunFinish,
+  DiscoveryRunStart,
+} from "./contest-run-catalog.js";
+export {
+  ContestRunCatalogSyncService,
+  contestRunDiscoveryLockName,
+} from "./contest-run-catalog.js";
+export type { ContestRunCatalogEnvironmentConfig } from "./contest-run-catalog-config.js";
+export { contestRunCatalogConfigFromEnvironment } from "./contest-run-catalog-config.js";
+export { KyselyContestRunCatalogRepository } from "./contest-run-catalog-repository.js";
 export {
   type ContestRunPollingHttpClient,
   ContestRunPollingRunner,

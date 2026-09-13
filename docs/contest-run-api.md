@@ -847,6 +847,41 @@ canonical selection: this validation created zero `canonical_score_events` and
 zero `current_scores` rows. This is not evidence that contest.run timestamps
 are UTC and does not add source precedence or timezone semantics.
 
+### 21.7 Phase 2E.7 discovery catalog synchronization contract
+
+The bounded `nearest`, optional `month`, and bounded per-testid `categories`
+requests form source catalog evidence only. A contest.run `testid` is the sole
+deduplication identity. When nearest and month disagree, both observations are
+preserved in deterministic external-identity metadata rather than selecting a
+calendar, timezone, activity, or scoring truth. Category rows are also source
+evidence only; Phase 2E.7 defines no canonical-category equivalence.
+
+Discovery does not call `displayscore`, retain response bodies, or create raw
+receipts. A category-request failure is reported separately while valid contest
+identity evidence can still synchronize. `dat`, `startday`, `starttime`, and
+`finishtime` remain raw source evidence and establish no year, UTC timestamp,
+timezone, start/end instant, or activity state. The prepared `collector:discover`
+command is bounded and one-shot; its guarded real-Percona catalog harness is
+separate from normal collection.
+
+### 21.8 Phase 2E.7 real catalog synchronization validation
+
+The guarded real validation passed against Percona Server 5.7.44-48 using only
+`dxarauca_livescore_test`. It made one bounded nearest request, one month
+request, and two category requests, then synchronized two unique source
+testids. The first synchronization created two internal contests, two source
+external identities, and two collector mappings; no new mapping was enabled.
+An immediate identical synchronization created no duplicate contest, external
+identity, or mapping, and preserved operator-controlled mapping configuration.
+
+The validation made no `displayscore` request and created zero score snapshots,
+canonical events, and current-score rows. Category records remained source
+evidence only. It inferred zero start/end timestamps and timezones. `DISCOVERED`
+therefore remains catalog knowledge, never `ACTIVE`, `REPORTING`, or `SCORING`.
+Explicit source-global discovery-lock contention returned `LOCKED_BY_OTHER`
+with zero mutations; advisory-lock release and zero fixture rows after cleanup
+were verified.
+
 ---
 
 ## 22. Contest discovery flow

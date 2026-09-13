@@ -310,3 +310,49 @@ docker compose -f database/docker-compose.percona57.yml down -v
 ```
 
 The integration runner refuses any database name other than `dxarauca_livescore_test`; it also verifies `SELECT DATABASE()` after connection before running any validation. It covers session bootstrap, schema engines/collations, JSON, microsecond timestamps, identity/category integrity, snapshot deduplication and resets, append-only diagnostics, canonical pointers, non-canonical historical snapshots, restrictive deletion, advisory locks, and raw-message batch semantics.
+
+### Phase 2E.7 durable discovery catalog contract
+
+Phase 2E.7 uses the existing schema without a migration. The existing
+contest.run source is resolved by `sources.code`; the unique
+`contest_external_ids(source_id, external_id)` identity stores
+`external_id = String(testid)` and prevents a second internal contest for that
+source/testid. Existing external identities reuse their `contest_id` and update
+only observational fields, deterministic evidence metadata, and
+`last_observed_at`; operator configuration is untouched.
+
+An unseen testid receives a catalog-only contest record with
+`status = DISCOVERED`, and null `slug`, `start_at`, `end_at`, and `time_zone`.
+The raw discovery day/time fields remain external evidence; no calendar,
+timezone, UTC instant, or activity semantics are inferred. Categories remain
+metadata evidence and do not create canonical `contest_categories`.
+
+The unique `(source_id, contest_id)` mapping is provisioned disabled with null
+poll/scheduling fields and the exact external-identity FK. Existing mappings
+retain enabled state, interval, configuration, and scheduling. Discovery audit
+uses `collector_runs` with null mapping, `run_kind = DISCOVERY`, actual HTTP
+`request_count`, and zero `received_message_count`. The guarded catalog test
+harness targets only the test database.
+
+#### Real Percona validation
+
+The guarded real harness passed on Percona Server 5.7.44-48 using only
+`dxarauca_livescore_test`. The durable identity rule was validated as:
+`contest.run identity = source_id + external_id(String(testid))`; an existing
+external identity reuses the same internal contest. One bounded nearest request,
+one month request, and two category requests synchronized two testids. The
+first sync created two contests, two external identities, and two mappings;
+the second created no duplicates and retained changed operator configuration.
+
+Provisioning remains deliberately safe: new discovery creates durable catalog
+identity, may create one collector mapping, and that mapping starts disabled.
+Discovery never overwrites existing `enabled`, `poll_interval_seconds`,
+`configuration`, `last_success_at`, `last_failure_at`, or `next_poll_at`.
+It does not infer `start_at`, `end_at`, or `time_zone`; `DISCOVERED` remains
+catalog knowledge rather than `ACTIVE`, `REPORTING`, or `SCORING`.
+
+The validation made zero displayscore requests and produced zero score
+snapshots, canonical events, or current-score rows. Categories remained source
+evidence only. Explicit discovery-lock contention returned `LOCKED_BY_OTHER`
+with zero mutations, lock release was verified, and fixture cleanup returned
+zero rows.

@@ -21,6 +21,7 @@ export {
   redactContestRunAuth,
 } from "./contest-run";
 export type {
+  ContestRunCategoryFetchError,
   ContestRunDiscoveredContest,
   ContestRunDiscoveryClient,
   ContestRunDiscoveryEvidence,
@@ -29,6 +30,7 @@ export type {
 } from "./contest-run-discovery";
 export {
   aggregateDiscoveryEvidence,
+  ContestRunDiscoveryError,
   ContestRunDiscoveryService,
 } from "./contest-run-discovery";
 export type {

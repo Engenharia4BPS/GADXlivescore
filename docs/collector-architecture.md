@@ -549,6 +549,45 @@ returned zero rows. Distributed heartbeats/leases, platform deployment
 configuration, source-specific retry policy, and automatic discovery
 provisioning remain out of scope.
 
+### 14.3 Phase 2E.7 durable discovery catalog synchronization
+
+`ContestRunCatalogSyncService` is a bounded one-shot catalog operation; it is
+not integrated into the continuous polling runtime. It resolves the existing
+`CONTEST_RUN` source by stable code and refuses to create a production source
+row if it is absent. It then acquires a dedicated source-global MySQL advisory
+lock on a pinned physical session:
+`als:<environment>:source:<source-id>:discovery`. A losing worker returns
+`LOCKED_BY_OTHER` before HTTP, run audit, or catalog mutation.
+
+The owner records a `collector_runs` audit row with a null mapping,
+`run_kind = DISCOVERY`, `RUNNING` then `SUCCESS`/`FAILED`, exact discovery HTTP
+request count, and `received_message_count = 0`; discovery bodies are not
+durable raw receipts. HTTP completes outside transactions. Each discovered
+contest is persisted in an independent short transaction resolving/creating the
+contest, upserting its external identity/evidence, and ensuring one mapping.
+
+New mappings are always disabled with no invented interval or schedule. Existing
+enabled state, interval, configuration, and scheduling remain operator-owned;
+only a null external identity link may be repaired when the exact source/testid
+relationship makes it unambiguous. `DISCOVERED` means only known source catalog
+identity, never active, reporting, scoring, upcoming, or running. Automatic
+activation and discovery scheduling remain deferred.
+
+#### Real Percona validation
+
+The guarded Phase 2E.7 catalog validation passed on the real Percona 5.7.44-48
+test target. It performed one nearest, one month, and two bounded category
+requests, synchronized two unique source testids, and created two contests,
+two external identities, and two disabled mappings. The same synchronization
+immediately repeated created no duplicates and preserved an explicitly changed
+operator mapping configuration.
+
+No start/end/timezone or activity semantics were inferred, categories remained
+source evidence, and no displayscore request, score snapshot, canonical event,
+or current-score row was created. A separately held source-global discovery
+lock returned `LOCKED_BY_OTHER` without mutation. The lock was released and the
+isolated fixture cleanup returned zero rows.
+
 ---
 
 ## 15. Raw response
