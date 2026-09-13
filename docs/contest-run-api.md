@@ -825,6 +825,28 @@ Aggregate-to-band disagreement was observed for 169 of 240 rows in testid
 `108`; this does not alter the source-authoritative aggregate totals. No reset
 claim was made because the validation used one temporal sample per contest.
 
+### 21.6 Phase 2E.4 real controlled persistence validation
+
+The guarded real integration harness completed with `PASS` against Percona
+Server 5.7.44-48 using only `dxarauca_livescore_test` and contest.run testid
+`91`. It persisted the real displayscore response through the established
+source-neutral path: original response hash and redacted raw receipt,
+source-adapter normalization, immutable score snapshots, and supplemental band
+snapshots. No contest.run-specific persistence path was introduced.
+
+The first fetch produced five accepted observations and five snapshots (with
+30 persisted band rows). An immediate second fetch produced five observation-
+level duplicates, no accepted snapshots, and no false new history rows. Auth
+redaction was verified for the persisted receipt and normalized source evidence.
+Fixture cleanup returned the isolated `PHASE2E4_TEST_*` namespace to zero rows.
+
+All five source dates remained `UNZONED_SOURCE_TEXT`. Under the current Phase
+2D canonical policy, contest.run observations with this unresolved timestamp
+quality may be persisted as historical evidence but are not eligible for
+canonical selection: this validation created zero `canonical_score_events` and
+zero `current_scores` rows. This is not evidence that contest.run timestamps
+are UTC and does not add source precedence or timezone semantics.
+
 ---
 
 ## 22. Contest discovery flow

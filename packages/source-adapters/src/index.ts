@@ -33,6 +33,7 @@ export {
 } from "./contest-run-discovery";
 export type {
   ContestRunDiscoveryEndpoint,
+  ContestRunDisplayScoreHttpResponse,
   ContestRunFetch,
   ContestRunHttpClientOptions,
   ContestRunHttpEndpoint,

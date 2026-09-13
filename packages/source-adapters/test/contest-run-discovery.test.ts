@@ -33,6 +33,7 @@ test("HTTP client fetches nearest with JSON Accept and returns parsed DTO metada
   assert.deepEqual(result.metadata.endpoint, "nearest");
   assert.equal(result.metadata.status, 200);
   assert(result.metadata.responseBytes > 0);
+  assert.equal("rawPayload" in result, false);
 });
 
 test("HTTP client fetches a validated month response", async () => {
@@ -97,6 +98,10 @@ test("HTTP client fetches displayscore through the redacting source parser", asy
   assert.equal(result.metadata.endpoint, "displayscore");
   assert.equal(result.data.records[0]?.sign, "DM7EE");
   assert.doesNotMatch(JSON.stringify(result.data), /auth|must-not-leave/i);
+  assert.match(
+    new TextDecoder().decode(result.rawPayload),
+    /must-not-leave-source-adapter/,
+  );
   const requestsBeforeInvalidInput = requestCount;
   await assert.rejects(
     client.displayScore(0),

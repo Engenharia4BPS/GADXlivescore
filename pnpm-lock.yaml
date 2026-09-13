@@ -89,6 +89,9 @@ importers:
       '@araucaria/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@araucaria/source-adapters':
+        specifier: workspace:*
+        version: link:../../packages/source-adapters
       kysely:
         specifier: 0.29.5
         version: 0.29.5

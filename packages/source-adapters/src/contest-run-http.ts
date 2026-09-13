@@ -42,6 +42,16 @@ export interface ContestRunHttpResponse<T> {
   metadata: ContestRunHttpResponseMetadata;
 }
 
+/**
+ * A displayscore response keeps its original bounded bytes solely for the
+ * collector receipt boundary. The parsed DTO remains redacted; callers must
+ * hand these bytes directly to the receipt redactor and must never log them.
+ */
+export interface ContestRunDisplayScoreHttpResponse
+  extends ContestRunHttpResponse<ContestRunDisplayScoreResponse> {
+  rawPayload: Uint8Array;
+}
+
 export type ContestRunFetch = (
   input: string,
   init: RequestInit,
@@ -76,7 +86,8 @@ export class ContestRunHttpError extends Error {
 
 /**
  * Read-only HTTP boundary for documented contest.run discovery endpoints.
- * It deliberately exposes response metadata and parsed DTOs, never bodies.
+ * It exposes parsed DTOs and response metadata. Displayscore additionally
+ * returns bounded original bytes solely for the durable-receipt boundary.
  */
 export class ContestRunHttpClient {
   private readonly baseUrl: string;
@@ -97,40 +108,51 @@ export class ContestRunHttpClient {
   async nearest(): Promise<
     ContestRunHttpResponse<ContestRunDiscoveryResponse>
   > {
-    return this.request("nearest", undefined, parseContestRunDiscoveryResponse);
+    return withoutRawPayload(
+      await this.request(
+        "nearest",
+        undefined,
+        parseContestRunDiscoveryResponse,
+      ),
+    );
   }
 
   async month(
     month: number,
   ): Promise<ContestRunHttpResponse<ContestRunDiscoveryResponse>> {
-    return this.request("month", month, parseContestRunDiscoveryResponse);
+    return withoutRawPayload(
+      await this.request("month", month, parseContestRunDiscoveryResponse),
+    );
   }
 
   async categories(
     testId: number,
   ): Promise<ContestRunHttpResponse<ContestRunCategoriesResponse>> {
-    return this.request(
-      "categories",
-      testId,
-      parseContestRunCategoriesResponse,
+    return withoutRawPayload(
+      await this.request(
+        "categories",
+        testId,
+        parseContestRunCategoriesResponse,
+      ),
     );
   }
 
   async displayScore(
     testId: number,
-  ): Promise<ContestRunHttpResponse<ContestRunDisplayScoreResponse>> {
-    return this.request(
+  ): Promise<ContestRunDisplayScoreHttpResponse> {
+    const response = await this.request(
       "displayscore",
       testId,
       parseContestRunDisplayScoreResponse,
     );
+    return { ...response, rawPayload: response.rawPayload };
   }
 
   private async request<T>(
     endpoint: ContestRunHttpEndpoint,
     value: number | undefined,
     parse: (body: Uint8Array) => T,
-  ): Promise<ContestRunHttpResponse<T>> {
+  ): Promise<ContestRunHttpResponse<T> & { rawPayload: Uint8Array }> {
     const url = endpointUrl(endpoint, value, this.baseUrl);
     const startedAt = performance.now();
     const signal = AbortSignal.timeout(this.timeoutMs);
@@ -201,7 +223,7 @@ export class ContestRunHttpClient {
     }
 
     try {
-      return { data: parse(bytes), metadata };
+      return { data: parse(bytes), metadata, rawPayload: bytes };
     } catch (error) {
       throw new ContestRunHttpError({
         code: "ADAPTER_PARSE",
@@ -229,6 +251,13 @@ function endpointUrl(
     case "displayscore":
       return contestRunEndpoint("displayscore", value, baseUrl);
   }
+}
+
+function withoutRawPayload<T>(response: {
+  data: T;
+  metadata: ContestRunHttpResponseMetadata;
+}): ContestRunHttpResponse<T> {
+  return { data: response.data, metadata: response.metadata };
 }
 
 async function readBoundedBody(

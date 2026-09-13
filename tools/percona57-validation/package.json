@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
     "@araucaria/collector-ingestion": "workspace:*",
     "@araucaria/database": "workspace:*",
+    "@araucaria/source-adapters": "workspace:*",
     "kysely": "0.29.5",
     "mysql2": "3.24.4"
   },

@@ -302,6 +302,57 @@ test("same-source timestamp-only observations create the next canonical event", 
   );
 });
 
+test("unzoned contest.run observations persist and dedup without canonical state", async () => {
+  const repository = new MemoryRepository();
+  const service = new CollectorIngestionService(repository);
+  const firstReceipt = receipt([
+    row({ date: "2026-09-11 12:00:00", auth: "do-not-persist" }),
+  ]);
+  const firstObservation = only(
+    normalizeContestRunPayload(redactReceipt(firstReceipt)).observations,
+  );
+  const first = await service.ingest(
+    firstReceipt,
+    contestRunDisplayScorePayloadAdapter,
+  );
+  const firstSnapshotId = repository.snapshotIdFor(firstObservation);
+  assert.equal(first.acceptedCount, 1);
+  assert.equal(
+    repository.reconciliationResultFor(firstSnapshotId)?.outcome,
+    "INELIGIBLE_TIMESTAMP",
+  );
+  assert.equal(repository.canonicalEventCountFor(firstSnapshotId), 0);
+  assert.equal(repository.currentFor("entry-DM7EE"), undefined);
+
+  const duplicate = await service.ingest(
+    receipt([row({ date: "2026-09-11 12:00:00" })]),
+    contestRunDisplayScorePayloadAdapter,
+  );
+  assert.equal(duplicate.acceptedCount, 0);
+  assert.equal(duplicate.duplicateCount, 1);
+  assert.equal(repository.snapshotCount(), 1);
+
+  const changedReceipt = receipt([
+    row({ date: "2026-09-11 12:01:00", score: 36595 }),
+  ]);
+  const changedObservation = only(
+    normalizeContestRunPayload(redactReceipt(changedReceipt)).observations,
+  );
+  const changed = await service.ingest(
+    changedReceipt,
+    contestRunDisplayScorePayloadAdapter,
+  );
+  const changedSnapshotId = repository.snapshotIdFor(changedObservation);
+  assert.equal(changed.acceptedCount, 1);
+  assert.equal(repository.snapshotCount(), 2);
+  assert.equal(
+    repository.reconciliationResultFor(changedSnapshotId)?.outcome,
+    "INELIGIBLE_TIMESTAMP",
+  );
+  assert.equal(repository.canonicalEventCountFor(changedSnapshotId), 0);
+  assert.equal(repository.currentFor("entry-DM7EE"), undefined);
+});
+
 test("batch lifecycle preserves valid rows and marks malformed mixed batches partial", async () => {
   const repository = new MemoryRepository();
   const service = new CollectorIngestionService(repository);
@@ -457,6 +508,9 @@ class MemoryRepository implements IngestionRepository {
   }
   canonicalEventCountFor(snapshotId: string): number {
     return this.canonicalEvents.has(snapshotId) ? 1 : 0;
+  }
+  snapshotCount(): number {
+    return this.snapshots.size;
   }
   currentFor(
     entryId: string,
