@@ -1,9 +1,13 @@
-import { Kysely, MysqlDialect } from "kysely";
+import {
+  CompiledQuery,
+  type DatabaseConnection,
+  Kysely,
+  MysqlDialect,
+} from "kysely";
+import { createPool } from "mysql2";
 import {
   type Connection,
   createConnection,
-  createPool,
-  type Pool,
   type PoolConnection,
 } from "mysql2/promise";
 
@@ -18,9 +22,11 @@ export const REQUIRED_SQL_MODE =
 
 export function createDatabase(config: DatabaseConfig): Kysely<Database> {
   const pool = createPool(poolOptions(config));
-  const sessionPool = new SessionBootstrapPool(pool);
   return new Kysely<Database>({
-    dialect: new MysqlDialect({ pool: sessionPool }),
+    dialect: new MysqlDialect({
+      pool,
+      onCreateConnection: configureKyselyDatabaseSession,
+    }),
   });
 }
 
@@ -53,23 +59,18 @@ export async function configureDatabaseSession(
   await connection.query("SET SESSION innodb_strict_mode = ON");
 }
 
-class SessionBootstrapPool {
-  constructor(private readonly pool: Pool) {}
-
-  async getConnection(): Promise<PoolConnection> {
-    const connection = await this.pool.getConnection();
-    try {
-      await configureDatabaseSession(connection);
-      return connection;
-    } catch (error) {
-      connection.release();
-      throw error;
-    }
-  }
-
-  async end(): Promise<void> {
-    await this.pool.end();
-  }
+async function configureKyselyDatabaseSession(
+  connection: DatabaseConnection,
+): Promise<void> {
+  await connection.executeQuery(
+    CompiledQuery.raw("SET SESSION time_zone = '+00:00'"),
+  );
+  await connection.executeQuery(
+    CompiledQuery.raw(`SET SESSION sql_mode = '${REQUIRED_SQL_MODE}'`),
+  );
+  await connection.executeQuery(
+    CompiledQuery.raw("SET SESSION innodb_strict_mode = ON"),
+  );
 }
 
 function poolOptions(config: DatabaseConfig) {

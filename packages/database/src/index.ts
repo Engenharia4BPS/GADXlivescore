@@ -10,10 +10,13 @@ export {
   databaseConfigFromEnvironment,
   validateDatabaseUrl,
 } from "./config.js";
+export { serializeJson } from "./json.js";
 export type {
   Database,
   DatabaseDateTime,
   DatabaseId,
+  JsonColumn,
+  JsonDocument,
   JsonObject,
   JsonPrimitive,
   JsonValue,

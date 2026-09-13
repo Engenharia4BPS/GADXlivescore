@@ -7,7 +7,10 @@ import type {
 } from "./types.js";
 
 export class CollectorIngestionService {
-  constructor(private readonly repository: IngestionRepository) {}
+  constructor(
+    private readonly repository: IngestionRepository,
+    private readonly reconciliationClock: () => string = utcNow,
+  ) {}
   async ingest(
     receipt: CollectorReceipt,
     adapter: PayloadAdapter,
@@ -17,6 +20,8 @@ export class CollectorIngestionService {
     await this.repository.claim(rawMessageId, receipt.receivedAt);
     let observationCount = 0;
     let rejectedCount = 0;
+    let acceptedCount = 0;
+    let duplicateCount = 0;
     try {
       const parsed = adapter.parse(redacted);
       observationCount = parsed.observations.length + parsed.rejected.length;
@@ -26,30 +31,52 @@ export class CollectorIngestionService {
         receipt.receivedAt,
         parsed.observations,
       );
+      const accepted = persisted.filter(
+        (result): result is Extract<typeof result, { outcome: "ACCEPTED" }> =>
+          result.outcome === "ACCEPTED",
+      );
+      acceptedCount = accepted.length;
+      duplicateCount = persisted.filter(
+        (result) => result.outcome === "DUPLICATE",
+      ).length;
+      rejectedCount += persisted.filter(
+        (result) => result.outcome === "REJECTED",
+      ).length;
+      const persistenceRejections = persisted.filter(
+        (result) => result.outcome === "REJECTED",
+      );
+      const reconciledAt = this.reconciliationClock();
+      for (const result of accepted) {
+        await this.repository.reconcileAcceptedSnapshot(
+          result.snapshotId,
+          reconciledAt,
+        );
+      }
       const result: ReceiptResult = {
         rawMessageId,
         observationCount,
-        acceptedCount: persisted.accepted,
-        duplicateCount: persisted.duplicates,
+        acceptedCount,
+        duplicateCount,
         rejectedCount,
-        status: finalStatus(
-          persisted.accepted,
-          persisted.duplicates,
-          parsed.rejected.length,
-        ),
+        status: finalStatus(acceptedCount, duplicateCount, rejectedCount),
       };
       await this.repository.finish(
         rawMessageId,
         result,
-        parsed.rejected.length ? { rejected_rows: parsed.rejected } : null,
+        rejectedCount
+          ? {
+              rejected_rows: parsed.rejected,
+              persistence_rejections: persistenceRejections,
+            }
+          : null,
       );
       return result;
     } catch (error) {
       const result: ReceiptResult = {
         rawMessageId,
         observationCount,
-        acceptedCount: 0,
-        duplicateCount: 0,
+        acceptedCount,
+        duplicateCount,
         rejectedCount,
         status: "FAILED",
       };
@@ -60,6 +87,9 @@ export class CollectorIngestionService {
       return result;
     }
   }
+}
+function utcNow(): string {
+  return new Date().toISOString().replace("T", " ").replace("Z", "");
 }
 function finalStatus(
   accepted: number,

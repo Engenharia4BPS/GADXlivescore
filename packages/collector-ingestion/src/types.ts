@@ -66,6 +66,28 @@ export interface BatchParseResult {
   observations: NormalizedScoreObservation[];
   rejected: Array<{ index: number; error: string }>;
 }
+
+export type ObservationPersistenceResult =
+  | {
+      outcome: "ACCEPTED";
+      entryId: DatabaseId;
+      snapshotId: DatabaseId;
+    }
+  | {
+      outcome: "DUPLICATE";
+      entryId: DatabaseId;
+    }
+  | {
+      outcome: "REJECTED";
+      reason: string;
+    };
+
+export type CanonicalReconciliationResult =
+  | { outcome: "CANONICAL_INITIAL"; canonicalEventId: DatabaseId }
+  | { outcome: "CANONICAL_ADVANCED"; canonicalEventId: DatabaseId }
+  | { outcome: "OUT_OF_ORDER" }
+  | { outcome: "DEFERRED_CROSS_SOURCE_POLICY" }
+  | { outcome: "INELIGIBLE_TIMESTAMP" };
 export interface PayloadAdapter {
   parse(receipt: RedactedReceipt): BatchParseResult;
 }

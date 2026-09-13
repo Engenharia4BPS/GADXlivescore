@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  type CanonicalCandidate,
+  type CanonicalReconciliationResult,
   CollectorIngestionService,
   type CollectorReceipt,
+  type CurrentCanonicalState,
+  decideSingleSourceSequence,
   type IngestionRepository,
   isExpectedSnapshotDuplicateError,
   type NormalizedScoreObservation,
   normalizeContestRunPayload,
   normalizedFingerprint,
+  type ObservationPersistenceResult,
   type ReceiptResult,
   redactReceipt,
   sha256,
@@ -150,6 +155,90 @@ test("aggregate qtotal remains authoritative when bands differ", () => {
   );
 });
 
+test("single-source policy defers a different source without mutating canonical state", () => {
+  const candidate: CanonicalCandidate = Object.freeze({
+    acceptanceStatus: "ACCEPTED",
+    entryId: "10",
+    snapshotId: "20",
+    sourceId: "2",
+    sourceTimestamp: "2026-09-11 12:01:00.000000",
+    sourceTimestampQuality: "CONFIRMED_UTC",
+  });
+  const current: CurrentCanonicalState = Object.freeze({
+    effectiveAt: "2026-09-11 12:00:00.000000",
+    eventId: "30",
+    snapshotId: "19",
+    sourceId: "1",
+  });
+  const before = structuredClone({ candidate, current });
+
+  assert.deepEqual(decideSingleSourceSequence(candidate, current), {
+    outcome: "DEFERRED_CROSS_SOURCE_POLICY",
+  });
+  assert.deepEqual({ candidate, current }, before);
+});
+
+test("same-source timestamp-only observations create the next canonical event", async () => {
+  const repository = new MemoryRepository();
+  const service = new CollectorIngestionService(repository);
+  const first = confirmedObservation("2026-09-11 12:00:00.000000");
+  const second: NormalizedScoreObservation = {
+    ...first,
+    sourceTimestamp: "2026-09-11 12:01:00.000000",
+    sourceTimestampRaw: "2026-09-11 12:01:00.000000 UTC",
+  };
+
+  const firstResult = await service.ingest(receipt({ fixture: "first" }), {
+    parse: () => ({ observations: [first], rejected: [] }),
+  });
+  const firstSnapshotId = repository.snapshotIdFor(first);
+  assert.equal(firstResult.acceptedCount, 1);
+  assert.equal(
+    repository.reconciliationResultFor(firstSnapshotId)?.outcome,
+    "CANONICAL_INITIAL",
+  );
+
+  const secondResult = await service.ingest(receipt({ fixture: "second" }), {
+    parse: () => ({ observations: [second], rejected: [] }),
+  });
+  const secondSnapshotId = repository.snapshotIdFor(second);
+  assert.notEqual(firstSnapshotId, secondSnapshotId);
+  assert.notDeepEqual(
+    normalizedFingerprint(first),
+    normalizedFingerprint(second),
+  );
+  assert.equal(secondResult.acceptedCount, 1);
+  assert.equal(
+    repository.reconciliationResultFor(secondSnapshotId)?.outcome,
+    "CANONICAL_ADVANCED",
+  );
+  assert.equal(repository.canonicalEventCountFor(secondSnapshotId), 1);
+  assert.deepEqual(repository.currentFor("entry-TEST1"), {
+    eventId: repository.canonicalEventIdFor(secondSnapshotId),
+    snapshotId: secondSnapshotId,
+  });
+
+  assert.deepEqual(
+    decideSingleSourceSequence(
+      {
+        acceptanceStatus: "ACCEPTED",
+        entryId: "entry-TEST1",
+        snapshotId: "equal-effective-at",
+        sourceId: "source-A",
+        sourceTimestamp: "2026-09-11 12:00:00",
+        sourceTimestampQuality: "CONFIRMED_UTC",
+      },
+      {
+        effectiveAt: "2026-09-11 12:00:00.000000",
+        eventId: "event-first",
+        snapshotId: "snapshot-first",
+        sourceId: "source-A",
+      },
+    ),
+    { outcome: "CANONICAL_ADVANCED" },
+  );
+});
+
 test("batch lifecycle preserves valid rows and marks malformed mixed batches partial", async () => {
   const repository = new MemoryRepository();
   const service = new CollectorIngestionService(repository);
@@ -183,6 +272,16 @@ test("exact duplicates do not create another snapshot and all-invalid batches fa
   assert.equal(failed.rejectedCount, 1);
 });
 
+test("repository-level rejection is counted as a rejected observation", async () => {
+  const result = await new CollectorIngestionService(
+    new RejectingRepository(),
+  ).ingest(receipt([row()]), { parse: normalizeContestRunPayload });
+  assert.equal(result.status, "FAILED");
+  assert.equal(result.acceptedCount, 0);
+  assert.equal(result.duplicateCount, 0);
+  assert.equal(result.rejectedCount, 1);
+});
+
 test("unexpected persistence failure is failed, not counted as a duplicate or acceptance", async () => {
   const repository = new FailingRepository();
   const result = await new CollectorIngestionService(repository).ingest(
@@ -199,6 +298,22 @@ test("unexpected persistence failure is failed, not counted as a duplicate or ac
 class MemoryRepository implements IngestionRepository {
   private next = 1;
   private readonly fingerprints = new Set<string>();
+  private readonly snapshots = new Map<string, CanonicalCandidate>();
+  private readonly snapshotIdsByFingerprint = new Map<string, string>();
+  private readonly canonicalEvents = new Map<string, string>();
+  private readonly current = new Map<
+    string,
+    {
+      eventId: string;
+      snapshotId: string;
+      sourceId: string;
+      effectiveAt: string;
+    }
+  >();
+  private readonly reconciliationResults = new Map<
+    string,
+    CanonicalReconciliationResult
+  >();
   async createReceipt(): Promise<string> {
     return String(this.next++);
   }
@@ -207,30 +322,99 @@ class MemoryRepository implements IngestionRepository {
     _raw: string,
     _at: string,
     observations: NormalizedScoreObservation[],
-  ): Promise<{ accepted: number; duplicates: number }> {
-    let accepted = 0;
-    let duplicates = 0;
+  ): Promise<ObservationPersistenceResult[]> {
+    const results: ObservationPersistenceResult[] = [];
     for (const observation of observations) {
       const fingerprint = Buffer.from(
         normalizedFingerprint(observation),
       ).toString("hex");
-      if (this.fingerprints.has(fingerprint)) duplicates += 1;
+      const entryId = `entry-${observation.normalizedCallsign}`;
+      if (this.fingerprints.has(fingerprint))
+        results.push({ outcome: "DUPLICATE", entryId });
       else {
         this.fingerprints.add(fingerprint);
-        accepted += 1;
+        const snapshotId = `snapshot-${this.next++}`;
+        this.snapshotIdsByFingerprint.set(fingerprint, snapshotId);
+        this.snapshots.set(snapshotId, {
+          acceptanceStatus: "ACCEPTED",
+          entryId,
+          snapshotId,
+          sourceId: observation.sourceId,
+          sourceTimestamp: observation.sourceTimestamp,
+          sourceTimestampQuality: observation.sourceTimestampQuality,
+        });
+        results.push({
+          outcome: "ACCEPTED",
+          entryId,
+          snapshotId,
+        });
       }
     }
-    return { accepted, duplicates };
+    return results;
+  }
+  async reconcileAcceptedSnapshot(
+    snapshotId: string,
+  ): Promise<CanonicalReconciliationResult> {
+    const candidate = this.snapshots.get(snapshotId);
+    if (!candidate) throw new Error("Unknown snapshot.");
+    const current = this.current.get(candidate.entryId);
+    const decision = decideSingleSourceSequence(candidate, current);
+    if (
+      decision.outcome === "CANONICAL_INITIAL" ||
+      decision.outcome === "CANONICAL_ADVANCED"
+    ) {
+      const eventId = `event-${this.next++}`;
+      this.canonicalEvents.set(snapshotId, eventId);
+      this.current.set(candidate.entryId, {
+        eventId,
+        snapshotId,
+        sourceId: candidate.sourceId,
+        effectiveAt: candidate.sourceTimestamp as string,
+      });
+      const result = { ...decision, canonicalEventId: eventId };
+      this.reconciliationResults.set(snapshotId, result);
+      return result;
+    }
+    this.reconciliationResults.set(snapshotId, decision);
+    return decision;
   }
   async finish(_raw: string, _result: ReceiptResult): Promise<void> {}
+  snapshotIdFor(observation: NormalizedScoreObservation): string {
+    const fingerprint = Buffer.from(
+      normalizedFingerprint(observation),
+    ).toString("hex");
+    const snapshotId = this.snapshotIdsByFingerprint.get(fingerprint);
+    if (!snapshotId) throw new Error("Snapshot was not persisted.");
+    return snapshotId;
+  }
+  canonicalEventIdFor(snapshotId: string): string {
+    const eventId = this.canonicalEvents.get(snapshotId);
+    if (!eventId) throw new Error("Snapshot was not canonicalized.");
+    return eventId;
+  }
+  canonicalEventCountFor(snapshotId: string): number {
+    return this.canonicalEvents.has(snapshotId) ? 1 : 0;
+  }
+  currentFor(
+    entryId: string,
+  ): { eventId: string; snapshotId: string } | undefined {
+    const current = this.current.get(entryId);
+    return current
+      ? { eventId: current.eventId, snapshotId: current.snapshotId }
+      : undefined;
+  }
+  reconciliationResultFor(
+    snapshotId: string,
+  ): CanonicalReconciliationResult | undefined {
+    return this.reconciliationResults.get(snapshotId);
+  }
 }
 
 class FailingRepository extends MemoryRepository {
   finished: ReceiptResult | undefined;
-  override async persistObservations(): Promise<{
-    accepted: number;
-    duplicates: number;
-  }> {
+  override async persistObservations(): Promise<
+    ObservationPersistenceResult[]
+  > {
     throw Object.assign(new Error("Data too long"), {
       code: "ER_DATA_TOO_LONG",
       errno: 1406,
@@ -239,6 +423,37 @@ class FailingRepository extends MemoryRepository {
   override async finish(_raw: string, result: ReceiptResult): Promise<void> {
     this.finished = result;
   }
+}
+
+class RejectingRepository extends MemoryRepository {
+  override async persistObservations(): Promise<
+    ObservationPersistenceResult[]
+  > {
+    return [{ outcome: "REJECTED", reason: "Fixture category mismatch." }];
+  }
+}
+
+function confirmedObservation(
+  sourceTimestamp: string,
+): NormalizedScoreObservation {
+  return {
+    sourceId: "source-A",
+    contestId: "contest-A",
+    normalizedCallsign: "TEST1",
+    displayCallsign: "TEST1",
+    categoryId: null,
+    categoryRaw: null,
+    sourceTimestamp,
+    sourceTimestampRaw: `${sourceTimestamp} UTC`,
+    sourceTimestampQuality: "CONFIRMED_UTC",
+    score: "100",
+    qsoTotal: "10",
+    pointsTotal: "900",
+    multTotal: "4",
+    rawMetrics: null,
+    fingerprintEvidence: null,
+    bands: [],
+  };
 }
 
 function only<T>(values: T[]): T {

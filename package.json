@@ -18,6 +18,7 @@
     "db:percona57:validate": "tsx tools/percona57-validation/src/index.ts",
     "db:percona57:integration": "tsx tools/percona57-validation/src/integration.ts",
     "test:db-integration": "tsx tools/percona57-validation/src/application-connectivity.ts",
+    "test:collector-db-integration": "tsx tools/percona57-validation/src/collector-ingestion-integration.ts",
     "test:collector-ingestion": "corepack pnpm --filter @araucaria/collector-ingestion test",
     "poc:contest-run": "tsx tools/contest-run-poc/src/index.ts",
     "poc:contest-run:phase-0-7": "tsx tools/contest-run-poc/src/phase-0-7.ts"

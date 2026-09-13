@@ -93,30 +93,38 @@ Facts known at insertion can be written to `score_snapshots.anomaly_flags`. Fact
 
 ## Transaction Boundaries
 
-Receipt and normalization are deliberately separated:
+Receipt, normalization, and reconciliation are deliberately separated:
 
 1. **Receipt transaction:** insert one `raw_messages` row as `RECEIVED`, containing the sanitized payload, original-payload hash, and transport metadata, then commit. This guarantees an audit/recovery record even if process interruption follows.
-2. **Normalization transaction:** atomically claim a recoverable payload (`PROCESSING`, increment `processing_attempts`), normalize each constituent observation, insert only non-duplicate `score_snapshots` and their `band_snapshots`, update the payload counts and final payload status, then commit. The unique normalized fingerprint makes a repeated attempt idempotent. Parse and validation errors remain represented in the raw payload and contribute to `PARTIAL` or `FAILED` as appropriate.
-3. **Reconciliation transaction:** evaluate accepted snapshots and append any new `score_snapshot_flags` and canonical event. If a canonical event is appended, insert or update its `current_scores` row in that same transaction. The composite current-score foreign key prevents an event pointer and snapshot pointer from being mixed across events.
+2. **Claim:** update the independently durable receipt from `RECEIVED` to `PROCESSING` and increment `processing_attempts`.
+3. **Normalization transaction:** normalize each constituent observation and atomically insert only non-duplicate `score_snapshots` and their `band_snapshots`. The unique normalized fingerprint makes a repeated attempt idempotent; a rollback returns no accepted snapshot result. Parse and validation errors remain represented in the raw payload and contribute to `PARTIAL` or `FAILED` as appropriate.
+4. **Reconciliation transaction:** for each accepted snapshot, lock its entry with `SELECT ... FOR UPDATE`, evaluate canonical policy, and append any `score_snapshot_flags` and canonical event. If a canonical event is appended, insert or update its `current_scores` row in that same transaction. The composite current-score foreign key prevents an event pointer and snapshot pointer from being mixed across events.
+5. **Final receipt update:** record the committed accepted/duplicate/rejected counts and final payload status only after the corresponding persistence outcome is known.
 
 The raw receipt row is the only mutable record in the first two boundaries. Snapshots, band rows, snapshot flags, and canonical events are append-only.
 
-## Phase 2A Ingestion Write Path
+## Phase 2D Ingestion Write Path
 
 `@araucaria/collector-ingestion` persists a source-neutral receipt first, calculating its original SHA-256 before recursively removing sensitive payload and HTTP metadata keys. It then claims the receipt and parses a batch independently: malformed rows are recorded as rejected while valid rows continue. An entirely invalid batch is `FAILED`; a mixed batch is `PARTIAL`.
 
-Each valid observation resolves the established `(contest_id, normalized_callsign)` entry identity, validates any category against the same contest, and creates an append-only snapshot. The fingerprint is SHA-256 over deterministic UTF-8 JSON with sorted object keys and sorted `(band, mode)` rows. It includes source/contest/entry identity, category and timestamp evidence, authoritative aggregate metrics, explicitly admitted source evidence, and bands; it excludes raw/unmapped metadata, receipt and HTTP transport data, processing/retry/collector-run data, and redaction bookkeeping. A normal insert treats only `ER_DUP_ENTRY`/1062 for `uq_score_snapshots_entry_source_fingerprint` as a duplicate; every other database error aborts the transaction. Aggregate totals are never recomputed from supplemental band rows. Canonical selection and `current_scores` are intentionally untouched.
+Each valid observation resolves the established `(contest_id, normalized_callsign)` entry identity, validates any category against the same contest, and creates an append-only snapshot. The fingerprint is SHA-256 over deterministic UTF-8 JSON with sorted object keys and sorted `(band, mode)` rows. It includes source/contest/entry identity, category and timestamp evidence, authoritative aggregate metrics, explicitly admitted source evidence, and bands; it excludes raw/unmapped metadata, receipt and HTTP transport data, processing/retry/collector-run data, and redaction bookkeeping. The repository checks the named unique fingerprint boundary before a normal insert and translates only `ER_DUP_ENTRY`/1062 for `uq_score_snapshots_entry_source_fingerprint` (including a concurrent insert race) to `DUPLICATE`; every other database error aborts the batch transaction. Band rows are inserted only after their snapshot insert succeeds. Aggregate totals are never recomputed from supplemental band rows.
 
-## Canonical Timeline And Current Projection
+## Phase 2D Single-Source Canonical Timeline
 
-Reconciliation evaluates source precedence, freshness, completeness, source health, and the application-configured reconciliation window. Source precedence is `DIRECT LOGGER > FEDERATION > EXTERNAL SERVER > MANUAL`, but precedence alone does not select an incomplete or unhealthy observation.
+Phase 2D implements a deliberately minimal, deterministic `SINGLE_SOURCE_SEQUENCE` policy. It is not the final multi-source reconciliation algorithm. An automatically eligible snapshot must be `ACCEPTED`, have a non-null `source_timestamp`, and have `source_timestamp_quality = CONFIRMED_UTC`. A null or unresolved source timestamp remains valid historical evidence but does not produce a canonical event; `received_at` is never substituted.
+
+For an entry with no current row, an eligible snapshot creates an `INITIAL_CANONICAL` event. If the current canonical snapshot is from the same source, an eligible candidate advances when its timestamp is equal to or later than the current `effective_at`, using `SAME_SOURCE_NONDECREASING_EFFECTIVE_AT`. Equal source times support a distinct correction at the same effective instant; timestamp-only updates and counter resets are eligible to advance. The event uses the snapshot source timestamp for `effective_at` and the application UTC reconciliation clock for `selected_at`.
+
+For the same source, a candidate timestamp older than the current effective time is retained but produces no event or projection update. Reconciliation instead appends one idempotent `OUT_OF_ORDER` flag with SHA-256 diagnostic fingerprint `OUT_OF_ORDER | snapshot_id`; it does not mutate the snapshot. When a current canonical snapshot is from another source, the candidate remains historical and the policy returns `DEFERRED_CROSS_SOURCE_POLICY` without changing the canonical event or `current_scores`.
+
+Source precedence, freshness thresholds, poll-interval stale calculation, completeness, source health, timestamp-quality ranking, source-divergence switching, and all `DIRECT`/`FEDERATION`/`EXTERNAL`/`MANUAL` cross-source selection remain explicitly reserved for the future multi-source reconciliation phase.
 
 For an accepted snapshot, reconciliation may append exactly one `canonical_score_events` row. The event references one snapshot and separates:
 
 - `selected_at`: when Araucaria chose the snapshot.
 - `effective_at`: the competitive/source time represented by that snapshot.
 
-The application must not append an event with `effective_at` earlier than the entry's latest canonical event. A late snapshot is retained and may receive an `OUT_OF_ORDER` flag, but it cannot move the canonical sequence backward.
+The Phase 2D policy must not append an event with `effective_at` earlier than the entry's latest same-source canonical event. A late snapshot is retained and receives the idempotent `OUT_OF_ORDER` diagnostic, but it cannot move the canonical sequence backward.
 
 In the same database transaction that inserts a canonical event, the application inserts or updates `current_scores`. It has exactly one row per `entry_id`, and its `canonical_event_id` and `canonical_snapshot_id` are validated together by a composite foreign key to the same canonical event. This maintains the intentionally denormalized fast-read pointers atomically.
 
@@ -133,7 +141,7 @@ The collector and analytics layers keep these concepts separate:
 | `REPORTING` | Its source timestamp advanced since the preceding accepted observation. |
 | `SCORING` | One or more competitive metrics changed. |
 
-Presence in contest.run `displayscore` does not prove activity. Freshness defaults and the 120-second cross-source reconciliation window are application configuration, not schema constraints. The collector singleton will acquire an environment-scoped MySQL advisory lock, for example `araucaria_livescore:production:collector`, using a dedicated connection; the schema records the lock name in `collector_runs` but does not attempt to model lock ownership as durable state.
+Presence in contest.run `displayscore` does not prove activity. Freshness defaults and any cross-source reconciliation window are future application configuration, not Phase 2D policy or schema constraints. The collector singleton will acquire an environment-scoped MySQL advisory lock, for example `araucaria_livescore:production:collector`, using a dedicated connection; the schema records the lock name in `collector_runs` but does not attempt to model lock ownership as durable state.
 
 ## Migration And Validation
 
@@ -173,6 +181,14 @@ Negative integrity validation passed:
 Fixture cleanup was confirmed: `PHASE2B_TEST` source, contest, and entry counts are all zero.
 
 Real application connectivity and advisory-lock validation also passed on the target: `dxarauca_livescore_test` on Percona Server `5.7.44-48`, `Percona Server (GPL), Release 48, Revision 497f936a373`. The exact test-database guard and UTC session configuration (`+00:00`) were verified. Two distinct pinned physical `mysql2` sessions (connection IDs `5705924` and `5705925`) proved connection-owned `GET_LOCK` behavior: the first acquired the lock, the second observed contention, the first explicitly released it, and the second then acquired and released it. Validator cleanup closed both sessions without application-data DML.
+
+### Phase 2D MySQL-Backed Collector Ingestion
+
+Real validation on Percona Server 5.7.44-48 using only `dxarauca_livescore_test` passed for the MySQL-backed collector ingestion path. It proved that the raw receipt commits independently before normalization; accepted snapshots persist; an initial canonical event is created; a same-source timestamp-only update advances canonical state; and an exact duplicate is rejected. The test also preserved counter decreases/resets, including score, QSO, and multiplier; retained source-authoritative aggregate totals when supplemental band sums differed; kept `current_scores` pointed at the exact canonical event/snapshot pair; appended `OUT_OF_ORDER` without mutating the snapshot; and retained an out-of-order observation without rewinding the current canonical state.
+
+The real fixture cleanup completed with zero remaining fixture rows. The final run recorded five accepted snapshots, four canonical events, one duplicate, and one `OUT_OF_ORDER` flag.
+
+Real validation also exposed and corrected application or validation-harness defects, not schema defects: Kysely now receives mysql2's callback-compatible pool; MySQL JSON bind values are explicitly serialized; fixture setup is transactional; the application maps `band_snapshots.snapshot_id` to the existing DDL; BIGINT `COUNT(*)` values are normalized in the harness; and confirmed-UTC `DATETIME(6)` values are compared deterministically at microsecond precision. No migration or database schema change was required.
 
 ### Local Percona 5.7 Integration
 

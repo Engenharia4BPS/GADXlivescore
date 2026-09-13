@@ -1,4 +1,4 @@
-import type { Generated } from "kysely";
+import type { Generated, JSONColumnType } from "kysely";
 
 export type DatabaseId = string;
 export type DatabaseDateTime = string;
@@ -7,6 +7,12 @@ export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export interface JsonObject {
   [key: string]: JsonValue;
 }
+export type JsonDocument = JsonObject | JsonValue[];
+export type JsonColumn = JSONColumnType<
+  JsonDocument | null,
+  string | null,
+  string | null
+>;
 
 export interface SourcesTable {
   id: Generated<DatabaseId>;
@@ -15,7 +21,7 @@ export interface SourcesTable {
   precedence_rank: number;
   display_name: string;
   base_url: string | null;
-  default_config: JsonValue | null;
+  default_config: JsonColumn;
   enabled: number;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
@@ -30,7 +36,7 @@ export interface ContestsTable {
   start_at: DatabaseDateTime | null;
   end_at: DatabaseDateTime | null;
   time_zone: string | null;
-  metadata: JsonValue | null;
+  metadata: JsonColumn;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
 }
@@ -46,7 +52,7 @@ export interface ContestExternalIdsTable {
   start_time: string | null;
   finish_day: number | null;
   finish_time: string | null;
-  metadata: JsonValue | null;
+  metadata: JsonColumn;
   last_observed_at: DatabaseDateTime | null;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
@@ -57,7 +63,7 @@ export interface ContestCategoriesTable {
   contest_id: DatabaseId;
   category_key: string;
   display_name: string;
-  metadata: JsonValue | null;
+  metadata: JsonColumn;
   active: number;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
@@ -70,7 +76,7 @@ export interface ContestCategoryExternalIdsTable {
   contest_external_id_id: DatabaseId;
   external_category_id: string;
   external_name: string | null;
-  raw_metadata: JsonValue | null;
+  raw_metadata: JsonColumn;
   last_observed_at: DatabaseDateTime | null;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
@@ -83,7 +89,7 @@ export interface EntriesTable {
   display_callsign: string | null;
   current_category_id: DatabaseId | null;
   current_category_observed_at: DatabaseDateTime | null;
-  metadata: JsonValue | null;
+  metadata: JsonColumn;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
 }
@@ -108,13 +114,13 @@ export interface RawMessagesTable {
   request_path_redacted: string | null;
   response_status: number | null;
   response_content_type: string | null;
-  response_headers_redacted: JsonValue | null;
+  response_headers_redacted: JsonColumn;
   payload_redacted: Uint8Array;
   payload_sha256: Uint8Array;
-  redaction_metadata: JsonValue | null;
-  parse_error: JsonValue | null;
-  validation_error: JsonValue | null;
-  metadata: JsonValue | null;
+  redaction_metadata: JsonColumn;
+  parse_error: JsonColumn;
+  validation_error: JsonColumn;
+  metadata: JsonColumn;
   created_at: DatabaseDateTime;
 }
 
@@ -125,7 +131,7 @@ export interface ScoreSnapshotsTable {
   source_id: DatabaseId;
   raw_message_id: DatabaseId;
   category_id: DatabaseId | null;
-  category_raw: JsonValue | null;
+  category_raw: JsonColumn;
   source_timestamp: DatabaseDateTime | null;
   source_timestamp_raw: string | null;
   source_timestamp_quality: string | null;
@@ -134,15 +140,15 @@ export interface ScoreSnapshotsTable {
   qso_total: string | null;
   points_total: string | null;
   mult_total: string | null;
-  raw_metrics: JsonValue | null;
+  raw_metrics: JsonColumn;
   normalized_fingerprint: Uint8Array;
   acceptance_status: string;
-  anomaly_flags: JsonValue | null;
+  anomaly_flags: JsonColumn;
   created_at: DatabaseDateTime;
 }
 
 export interface BandSnapshotsTable {
-  score_snapshot_id: DatabaseId;
+  snapshot_id: DatabaseId;
   band: string;
   mode: string;
   qso: string | null;
@@ -156,19 +162,19 @@ export interface ScoreSnapshotFlagsTable {
   snapshot_id: DatabaseId;
   flag: string;
   detected_at: DatabaseDateTime;
-  details: JsonValue | null;
+  details: JsonColumn;
   diagnostic_fingerprint: Uint8Array;
 }
 
 export interface CanonicalScoreEventsTable {
   id: Generated<DatabaseId>;
   entry_id: DatabaseId;
-  snapshot_id: DatabaseId;
+  score_snapshot_id: DatabaseId;
   selected_at: DatabaseDateTime;
   effective_at: DatabaseDateTime;
   selection_basis: string;
   selection_reason: string | null;
-  context: JsonValue | null;
+  context: JsonColumn;
 }
 
 export interface CurrentScoresTable {
@@ -188,7 +194,7 @@ export interface CollectorSourceContestsTable {
   last_success_at: DatabaseDateTime | null;
   last_failure_at: DatabaseDateTime | null;
   next_poll_at: DatabaseDateTime | null;
-  configuration: JsonValue | null;
+  configuration: JsonColumn;
   created_at: DatabaseDateTime;
   updated_at: DatabaseDateTime;
 }
@@ -206,8 +212,8 @@ export interface CollectorRunsTable {
   request_count: number;
   received_message_count: number;
   error_code: string | null;
-  error_details: JsonValue | null;
-  metadata: JsonValue | null;
+  error_details: JsonColumn;
+  metadata: JsonColumn;
   created_at: DatabaseDateTime;
 }
 

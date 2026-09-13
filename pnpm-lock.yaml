@@ -80,6 +80,9 @@ importers:
 
   tools/percona57-validation:
     dependencies:
+      '@araucaria/collector-ingestion':
+        specifier: workspace:*
+        version: link:../../packages/collector-ingestion
       '@araucaria/database':
         specifier: workspace:*
         version: link:../../packages/database
