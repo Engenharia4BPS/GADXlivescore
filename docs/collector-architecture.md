@@ -498,8 +498,56 @@ zero collector runs, and no schedule mutation. Lock release and fixture cleanup
 were verified. The five `UNZONED_SOURCE_TEXT` observations remained
 non-canonical (`canonicalEventCount = 0`, `currentScoreCount = 0`).
 
-Stale `RUNNING` recovery, abandoned-run recovery after a crash, retry/backoff,
-jitter, and continuous daemon/runtime-loop scheduling are deferred.
+### 14.2 Phase 2E.6 runtime and abandoned-run recovery
+
+`CollectorRuntimeService.run` is the continuous operational layer around the
+bounded polling cycle. It performs startup recovery once, then uses a
+sequential `runCycle`/abortable-sleep loop rather than `setInterval`; a later
+cycle cannot overlap a prior cycle in the same process. Mapping-level outcomes
+remain contained in their completed cycle. Only a top-level infrastructure
+failure emits `RUNTIME_CYCLE_FAILED` and waits the bounded runtime backoff
+before retrying.
+
+`RUNNING` is audit state, not durable lock ownership. Recovery considers only
+rows older than the configured stale threshold and then attempts to reacquire
+the same mapping lock, `als:<environment>:csc:<mapping-id>`, on a pinned
+physical session. A held lock leaves the row unchanged as `ACTIVE_LOCK_HELD`.
+Only successful lock reacquisition permits a conditional
+`RUNNING`/`finished_at IS NULL` update to `FAILED` with the sanitized
+`ABANDONED_RUN_RECOVERED` code. MySQL releases a connection-owned advisory lock
+when its physical connection dies, which is why both age and reacquisition are
+required.
+
+For an enabled mapping with a valid interval, recovery atomically records
+`last_failure_at` and advances `next_poll_at`. Disabled mappings are never
+re-enabled; invalid/null intervals and unlinked runs are finalized without an
+invented schedule. `SIGINT` and `SIGTERM` abort sleep and prevent a new cycle,
+while allowing the active bounded cycle to finish before the entrypoint closes
+the database pool. Structured, sanitized runtime events cover startup,
+recovery, cycles, runtime failures, shutdown, and stop.
+
+`DATABASE_URL` and `COLLECTOR_ENVIRONMENT` are required by `collector:run`.
+Intentional defaults are a 30-second cycle, 10 mappings/cycle, 50 recovery
+rows/batch, a 15-minute stale threshold, a 5-second runtime-failure backoff,
+and a 60-second maximum backoff.
+
+Real validation passed on Percona Server 5.7.44-48 using
+`dxarauca_livescore_test`. The recovery scenarios were separate: (A) an
+abandoned stale `RUNNING` row whose mapping lock was available was recovered as
+`FAILED` with `ABANDONED_RUN_RECOVERED`, a `finished_at`, an advanced enabled
+mapping failure schedule, and verified lock release; (B) a stale row whose same
+mapping lock was held remained unchanged, with scheduling unchanged and an
+active-lock skip result. Stale age alone is not abandonment evidence: recovery
+requires stale age *and* successful reacquisition of the exact mapping lock.
+
+Recovery ran before a finite runtime validation cycle. That cycle started and
+completed once (`maxConcurrentCycles = 1`), made one displayscore HTTP request,
+then honored shutdown without starting another cycle. The resulting
+`UNZONED_SOURCE_TEXT` observations remained non-canonical
+(`canonicalEventCount = 0`, `currentScoreCount = 0`), and fixture cleanup
+returned zero rows. Distributed heartbeats/leases, platform deployment
+configuration, source-specific retry policy, and automatic discovery
+provisioning remain out of scope.
 
 ---
 

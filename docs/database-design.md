@@ -193,8 +193,57 @@ lock release was verified. The persisted contest.run observations remained
 `canonicalEventCount = 0` and `currentScoreCount = 0`. Fixture cleanup verified
 zero remaining rows.
 
-Stale `RUNNING` recovery, abandoned-run recovery after a crash, retry/backoff,
-jitter, and continuous daemon/runtime-loop scheduling remain deferred.
+## Phase 2E.6 Runtime Recovery Contract
+
+`collector_runs.outcome = RUNNING` is historical lifecycle state, not proof
+that a worker still owns a mapping. MySQL advisory locks are owned by physical
+connections and disappear when that connection dies. Startup recovery therefore
+selects a bounded, deterministic batch of rows that are still `RUNNING`, still
+unfinished, and older than the application stale threshold, then attempts
+non-blocking reacquisition of the same per-mapping lock before changing a row.
+
+If reacquisition fails, the row and mapping remain unchanged and the result is
+`ACTIVE_LOCK_HELD`. If it succeeds, one short transaction conditionally updates
+the row only while it is still `RUNNING` with a null `finished_at`, preventing a
+late recovery worker from overwriting a completed run. The recovered row becomes
+`FAILED` with `ABANDONED_RUN_RECOVERED` and a sanitized recovery detail.
+
+An enabled mapping with a valid interval receives `last_failure_at = recovery
+UTC` and `next_poll_at = recovery UTC + interval` in the same transaction. A
+disabled mapping is finalized without re-enabling or rescheduling it. A null or
+invalid interval is finalized with explicit `INVALID_MAPPING_INTERVAL` metadata
+and leaves `next_poll_at` unchanged. An unlinked run is finalized without a
+mapping update. Lock release and physical-session close always occur outside
+that transaction.
+
+The runtime uses a sequential cycle/sleep loop and an `AbortSignal`: shutdown
+interrupts sleep, prevents a new cycle, permits the active cycle to finish, and
+then lets the executable close pooled resources. Its events contain only stable
+codes and IDs; they never include URLs, credentials, raw payloads, or source
+authentication. The guarded finite real-Percona runtime harness passed on
+Percona Server 5.7.44-48 against `dxarauca_livescore_test`.
+
+### Real Runtime Recovery Validation
+
+The validation exercised separate recovery scenarios; its counts are not a
+single recovery batch. In scenario A, a stale `RUNNING` candidate had no owner
+for the exact mapping lock. Recovery acquired that lock, finalized the
+`collector_run` as `FAILED` with `error_code = ABANDONED_RUN_RECOVERED`, set
+`finished_at`, advanced `last_failure_at` and `next_poll_at` for the enabled
+valid-interval mapping, and verified advisory-lock release.
+
+In scenario B, the same mapping lock was deliberately held. Recovery reported
+an active lock and skipped the stale row: neither the `collector_run` nor its
+schedule changed. Stale age alone therefore never proves abandonment; only
+stale age plus successful reacquisition of the exact mapping lock is safe
+evidence to recover an old `RUNNING` row.
+
+Recovery ran before normal polling. The finite runtime started and completed
+one cycle with `maxConcurrentCycles = 1`, made one real displayscore HTTP
+request, accepted shutdown, stopped cleanly, and began no following cycle.
+The `UNZONED_SOURCE_TEXT` observations remained non-canonical
+(`canonicalEventCount = 0`, `currentScoreCount = 0`), and fixture cleanup
+verified zero rows.
 
 ## Migration And Validation
 

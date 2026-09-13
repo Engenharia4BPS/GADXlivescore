@@ -20,6 +20,8 @@
     "test:db-integration": "tsx tools/percona57-validation/src/application-connectivity.ts",
     "test:collector-db-integration": "tsx tools/percona57-validation/src/collector-ingestion-integration.ts",
     "test:collector-polling-db-integration": "tsx tools/percona57-validation/src/collector-polling-integration.ts",
+    "test:collector-runtime-db-integration": "tsx tools/percona57-validation/src/collector-runtime-integration.ts",
+    "collector:run": "tsx packages/collector-ingestion/src/runtime-entrypoint.ts",
     "test:contest-run-db-integration": "tsx tools/percona57-validation/src/contest-run-ingestion-integration.ts",
     "test:collector-ingestion": "corepack pnpm --filter @araucaria/collector-ingestion test",
     "poc:contest-run": "tsx tools/contest-run-poc/src/index.ts",

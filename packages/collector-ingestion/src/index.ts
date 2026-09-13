@@ -46,11 +46,36 @@ export {
   PollingSourceRunError,
 } from "./polling.js";
 export { KyselyPollingMappingRepository } from "./polling-repository.js";
+export type {
+  CollectorRunRecoveryOptions,
+  CollectorRunRecoveryRepository,
+  CollectorRunRecoveryResult,
+  CollectorRunRecoverySummary,
+  RecoveryFinalizationOutcome,
+  RecoveryFinalizationResult,
+  RecoveryRunOutcome,
+  StaleCollectorRun,
+} from "./recovery.js";
+export { CollectorRunRecoveryService } from "./recovery.js";
+export { KyselyCollectorRunRecoveryRepository } from "./recovery-repository.js";
 export {
   type IngestionRepository,
   isExpectedSnapshotDuplicateError,
   KyselyIngestionRepository,
 } from "./repository.js";
+export type {
+  CollectorRuntimeEvent,
+  CollectorRuntimeEventSink,
+  CollectorRuntimeEventType,
+  CollectorRuntimeOptions,
+  CollectorRuntimeResult,
+  PollingCycleRunner,
+  RuntimeClock,
+  RuntimeSleeper,
+} from "./runtime.js";
+export { abortableSleep, CollectorRuntimeService } from "./runtime.js";
+export type { CollectorRuntimeEnvironmentConfig } from "./runtime-config.js";
+export { collectorRuntimeConfigFromEnvironment } from "./runtime-config.js";
 export { CollectorIngestionService } from "./service.js";
 export type {
   CanonicalCandidate,
