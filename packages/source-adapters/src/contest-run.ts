@@ -201,27 +201,25 @@ export function isContestRunTestId(value: unknown): value is number {
 export function contestRunEndpoint(
   endpoint: ContestRunEndpointName,
   value?: number,
+  baseUrl = CONTEST_RUN_BASE_URL,
 ): string {
   switch (endpoint) {
     case "nearest":
-      return new URL("/api/contest/nearest", CONTEST_RUN_BASE_URL).toString();
+      return new URL("/api/contest/nearest", baseUrl).toString();
     case "month":
       if (!isMonth(value)) {
         throw new Error("contest.run month must be an integer from 1 to 12.");
       }
-      return new URL(
-        `/api/contest/month/${value}`,
-        CONTEST_RUN_BASE_URL,
-      ).toString();
+      return new URL(`/api/contest/month/${value}`, baseUrl).toString();
     case "categories":
       return new URL(
         `/api/category/contest/${requireTestId(value)}`,
-        CONTEST_RUN_BASE_URL,
+        baseUrl,
       ).toString();
     case "displayscore":
       return new URL(
         `/api/displayscore/${requireTestId(value)}`,
-        CONTEST_RUN_BASE_URL,
+        baseUrl,
       ).toString();
   }
 }

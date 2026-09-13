@@ -20,3 +20,23 @@ export {
   parseContestRunDisplayScoreResponse,
   redactContestRunAuth,
 } from "./contest-run";
+export type {
+  ContestRunDiscoveredContest,
+  ContestRunDiscoveryClient,
+  ContestRunDiscoveryEvidence,
+  ContestRunDiscoveryOptions,
+  ContestRunDiscoveryResult,
+} from "./contest-run-discovery";
+export {
+  aggregateDiscoveryEvidence,
+  ContestRunDiscoveryService,
+} from "./contest-run-discovery";
+export type {
+  ContestRunDiscoveryEndpoint,
+  ContestRunFetch,
+  ContestRunHttpClientOptions,
+  ContestRunHttpErrorCode,
+  ContestRunHttpResponse,
+  ContestRunHttpResponseMetadata,
+} from "./contest-run-http";
+export { ContestRunHttpClient, ContestRunHttpError } from "./contest-run-http";

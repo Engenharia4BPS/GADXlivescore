@@ -760,6 +760,37 @@ observed IDs, codes, labels, and unknown fields; no contest year, timezone, or
 activity state is inferred. A `displayscore` row means only source presence,
 not PRESENT, FRESH, REPORTING, SCORING, or currently active.
 
+### 21.2 Phase 2E.2 discovery contract
+
+`ContestRunHttpClient` performs bounded `GET` requests with
+`Accept: application/json`, a timeout, and no authentication or retry policy.
+It sends raw response bytes only to the existing source-adapter parsers and
+returns parsed DTOs with endpoint name, HTTP status, duration, and byte-count
+metadata. It does not retain or log response bodies. Timeout, network,
+non-2xx, invalid-content/body, oversized-body, and adapter-parse conditions
+are explicit typed errors.
+
+`ContestRunDiscoveryService` fetches `/contest/nearest`, optionally one
+`/contest/month/{month}`, then categories for the discovered IDs. It deduplicates
+only by `testid`; each nearest/month record remains in `discoveryEvidence`, so
+conflicting raw fields have no invented winner. Category IDs, codes, labels,
+sentinels, and unknown fields remain source evidence; no database persistence,
+canonical category mapping, year, timezone, UTC timestamp, or activity meaning
+is assigned. The optional `poc:contest-run:discovery` command is a separate,
+read-only probe: current UTC month, at most two category requests, at most four
+requests total, no `displayscore` requests, and sanitized JSON summary only.
+
+### 21.3 Phase 2E.2 real read-only validation
+
+The explicit real discovery probe completed with `PASS`. It made four bounded
+read-only requests: `nearest`, the current-month discovery endpoint, and two
+category endpoints. It made no `displayscore` requests and performed no
+database writes. The real result confirmed testid-only deduplication across
+nearest/month evidence, preservation of source-specific/conflicting discovery
+evidence, and enforcement of the two-contest category-fetch bound. It did not
+infer contest year, timezone, UTC timestamps, activity, or current-active
+state.
+
 ---
 
 ## 22. Contest discovery flow
