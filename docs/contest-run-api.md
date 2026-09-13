@@ -740,6 +740,26 @@ interface ContestRunAdapter {
 }
 ```
 
+### 21.1 Phase 2E.1 source-adapter contract
+
+The implemented source adapter is a pure HTTP-response-to-DTO boundary: it
+does not perform HTTP, scheduling, or database I/O. It recursively removes any
+case-insensitive `auth` key before a `displayscore` DTO leaves
+`@araucaria/source-adapters`; collector normalization repeats that protection
+before retaining raw metrics, and row-rejection diagnostics contain only the
+row index and error.
+
+`date` is preserved as raw source evidence. It is not a proven UTC instant, so
+normalization produces `sourceTimestamp: null` and
+`sourceTimestampQuality: UNZONED_SOURCE_TEXT` when it is present. Aggregate
+score/QSO/points/mult values remain source-authoritative and are never
+recomputed from bands; band disagreement is valid source evidence. `soft` may
+be a string or number, while `qtotalc`, `qtotalp`, and `qtotalr` remain raw
+unresolved metrics without invented semantics. Discovery/category DTOs retain
+observed IDs, codes, labels, and unknown fields; no contest year, timezone, or
+activity state is inferred. A `displayscore` row means only source presence,
+not PRESENT, FRESH, REPORTING, SCORING, or currently active.
+
 ---
 
 ## 22. Contest discovery flow

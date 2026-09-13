@@ -5,6 +5,8 @@ export {
   stableJson,
 } from "./canonical.js";
 export {
+  contestRunDisplayScorePayloadAdapter,
+  normalizeContestRunDisplayScoreResponse,
   normalizeContestRunPayload,
   normalizeContestRunRow,
 } from "./contest-run.js";

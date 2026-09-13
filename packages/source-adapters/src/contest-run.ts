@@ -1,5 +1,14 @@
 export const CONTEST_RUN_BASE_URL = "https://contest.run";
 
+export type ContestRunJsonPrimitive = boolean | null | number | string;
+export type ContestRunJsonValue =
+  | ContestRunJsonPrimitive
+  | ContestRunJsonObject
+  | ContestRunJsonValue[];
+export interface ContestRunJsonObject {
+  [field: string]: ContestRunJsonValue;
+}
+
 export type ContestRunEndpointName =
   | "nearest"
   | "month"
@@ -7,6 +16,18 @@ export type ContestRunEndpointName =
   | "displayscore";
 
 export type ContestRunScalar = string | number | boolean | null;
+
+export interface ContestRunDiscoveryResponse {
+  records: readonly ContestRunDiscoveryRecord[];
+}
+
+export interface ContestRunCategoriesResponse {
+  records: readonly ContestRunCategoryRecord[];
+}
+
+export interface ContestRunDisplayScoreResponse {
+  records: readonly ContestRunScoreRecord[];
+}
 
 /**
  * Fields observed in the 2026-09-11 read-only POC. `dat` deliberately has no
@@ -61,7 +82,7 @@ export interface ContestRunCategoryRecord {
 /**
  * Observed score rows. These are external boundary types, not canonical types.
  * Fields without confirmed semantics remain raw even when their observed type is
- * known. The potentially sensitive `auth` field must never leave the adapter.
+ * known. Parsed DTOs recursively remove potentially sensitive `auth` fields.
  */
 export interface ContestRunScoreRecord {
   rownum?: number;
@@ -97,8 +118,75 @@ export interface ContestRunScoreRecord {
   mstotal?: number;
   mztotal?: number;
   soft?: string | number;
-  auth?: string;
   [field: string]: ContestRunScalar | unknown;
+}
+
+/** Parses an observed JSON HTTP body without performing I/O or persistence. */
+export function parseContestRunDiscoveryResponse(
+  body: string | Uint8Array,
+): ContestRunDiscoveryResponse {
+  const records = parseArrayBody(body, "contest discovery");
+  return {
+    records: records.flatMap((record) => {
+      if (!isJsonObject(record) || !isContestRunTestId(record.testid))
+        return [];
+      return [record as ContestRunDiscoveryRecord];
+    }),
+  };
+}
+
+/** Parses an observed JSON HTTP body without interpreting category semantics. */
+export function parseContestRunCategoriesResponse(
+  body: string | Uint8Array,
+): ContestRunCategoriesResponse {
+  const records = parseArrayBody(body, "contest categories");
+  return {
+    records: records.flatMap((record) =>
+      isJsonObject(record) ? [record as ContestRunCategoryRecord] : [],
+    ),
+  };
+}
+
+/**
+ * Parses a displayscore response into source DTOs. Invalid row shapes remain
+ * positional empty DTOs so collector normalization can reject only those rows.
+ */
+export function parseContestRunDisplayScoreResponse(
+  body: string | Uint8Array,
+): ContestRunDisplayScoreResponse {
+  const records = parseArrayBody(body, "displayscore");
+  return {
+    records: records.map((record) =>
+      isJsonObject(record)
+        ? (redactContestRunAuth(record) as ContestRunScoreRecord)
+        : {},
+    ),
+  };
+}
+
+/**
+ * Removes `auth` keys case-insensitively from JSON-shaped source evidence.
+ * This is deliberately recursive: source-specific nested diagnostic objects
+ * must not carry credentials across the source-adapter boundary either.
+ */
+export function redactContestRunAuth(value: unknown): ContestRunJsonValue {
+  if (Array.isArray(value)) return value.map(redactContestRunAuth);
+  if (isJsonObject(value)) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([field]) => field.toLowerCase() !== "auth")
+        .map(([field, nested]) => [field, redactContestRunAuth(nested)]),
+    );
+  }
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    typeof value === "string"
+  ) {
+    return value;
+  }
+  return String(value);
 }
 
 export function isContestRunTestId(value: unknown): value is number {
@@ -153,4 +241,26 @@ function requireTestId(value: unknown): number {
   }
 
   return value;
+}
+
+function parseArrayBody(
+  body: string | Uint8Array,
+  endpoint: string,
+): ContestRunJsonValue[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(
+      typeof body === "string" ? body : new TextDecoder().decode(body),
+    );
+  } catch {
+    throw new Error(`contest.run ${endpoint} response is not valid JSON.`);
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`contest.run ${endpoint} response must be a JSON array.`);
+  }
+  return value as ContestRunJsonValue[];
+}
+
+function isJsonObject(value: unknown): value is ContestRunJsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -1,22 +1,40 @@
-import type { ContestRunScoreRecord } from "@araucaria/source-adapters";
+import {
+  type ContestRunDisplayScoreResponse,
+  type ContestRunScoreRecord,
+  parseContestRunDisplayScoreResponse,
+  redactContestRunAuth,
+} from "@araucaria/source-adapters";
 import type {
   BatchParseResult,
   NormalizedScoreObservation,
+  PayloadAdapter,
   RedactedReceipt,
 } from "./types.js";
 
 const bands = ["160", "80", "40", "20", "15", "10"];
+
+/**
+ * The source-specific bridge supplied to CollectorIngestionService after it has
+ * redacted and durably received an HTTP payload. It is intentionally pure.
+ */
+export const contestRunDisplayScorePayloadAdapter: PayloadAdapter = {
+  parse: normalizeContestRunPayload,
+};
+
 export function normalizeContestRunPayload(
   receipt: RedactedReceipt,
 ): BatchParseResult {
-  const value: unknown = JSON.parse(
-    new TextDecoder().decode(receipt.payloadRedacted),
-  );
-  if (!Array.isArray(value))
-    throw new Error("contest.run displayscore payload must be an array.");
+  const response = parseContestRunDisplayScoreResponse(receipt.payloadRedacted);
+  return normalizeContestRunDisplayScoreResponse(response, receipt);
+}
+
+export function normalizeContestRunDisplayScoreResponse(
+  response: ContestRunDisplayScoreResponse,
+  receipt: RedactedReceipt,
+): BatchParseResult {
   const observations: NormalizedScoreObservation[] = [];
   const rejected: BatchParseResult["rejected"] = [];
-  value.forEach((row, index) => {
+  response.records.forEach((row, index) => {
     try {
       observations.push(
         normalizeContestRunRow(row as ContestRunScoreRecord, receipt),
@@ -40,9 +58,9 @@ export function normalizeContestRunRow(
     typeof row.date === "string" && row.date.trim() ? row.date.trim() : null;
   const metric = (name: keyof ContestRunScoreRecord): string | null =>
     integerString(row[name]);
-  const raw = Object.fromEntries(
-    Object.entries(row).filter(([key]) => key !== "auth"),
-  );
+  // The parser already redacts auth. Repeat the source boundary protection for
+  // callers of this exported normalizer that provide a DTO directly.
+  const raw = redactContestRunAuth(row);
   return {
     sourceId: receipt.sourceId,
     contestId: requiredContest(receipt),

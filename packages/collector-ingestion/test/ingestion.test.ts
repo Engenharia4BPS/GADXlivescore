@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  parseContestRunCategoriesResponse,
+  parseContestRunDiscoveryResponse,
+  parseContestRunDisplayScoreResponse,
+} from "@araucaria/source-adapters";
+import {
   type CanonicalCandidate,
   type CanonicalReconciliationResult,
   CollectorIngestionService,
   type CollectorReceipt,
   type CurrentCanonicalState,
+  contestRunDisplayScorePayloadAdapter,
   decideSingleSourceSequence,
   type IngestionRepository,
   isExpectedSnapshotDuplicateError,
@@ -50,6 +56,7 @@ test("contest.run redaction, heterogeneous soft, and unresolved fields are prese
         qtotalp: 2,
         qtotalr: 3,
         auth: "never-store",
+        diagnostic: { auth: "never-store-nested", retained: true },
       }),
     ]),
   );
@@ -69,6 +76,7 @@ test("contest.run redaction, heterogeneous soft, and unresolved fields are prese
     1,
   );
   assert.equal((observation.rawMetrics as Record<string, unknown>).soft, "4");
+  assert.doesNotMatch(JSON.stringify(observation.rawMetrics), /auth|secret/i);
   const numericSoft = only(
     normalizeContestRunPayload(
       redactReceipt(
@@ -79,6 +87,61 @@ test("contest.run redaction, heterogeneous soft, and unresolved fields are prese
   assert.deepEqual(
     observation.fingerprintEvidence,
     numericSoft.fingerprintEvidence,
+  );
+});
+
+test("contest.run HTTP DTOs bridge to normalized observations without persistence", () => {
+  const payload = [
+    {
+      sign: "DM7EE",
+      date: "2026-09-11 12:00:00",
+      score: "36594",
+      qtotal: 342,
+      ptotal: 100,
+      mtotal: 107,
+      q40: "20",
+      soft: 4,
+      qtotalc: 1,
+      qtotalp: 2,
+      qtotalr: 3,
+      auth: "adapter-must-remove-this",
+    },
+    { sign: "" },
+  ];
+  const body = encoder.encode(JSON.stringify(payload));
+  const sourceDto = parseContestRunDisplayScoreResponse(body);
+  const firstDto = sourceDto.records[0];
+  assert.equal(sourceDto.records.length, 2);
+  assert(firstDto);
+  assert.equal("auth" in firstDto, false);
+  assert.equal(firstDto.soft, 4);
+
+  const redacted = redactReceipt(receipt(payload));
+  const parsed = contestRunDisplayScorePayloadAdapter.parse(redacted);
+  assert.equal(parsed.observations.length, 1);
+  assert.equal(parsed.rejected.length, 1);
+  const observation = only(parsed.observations);
+  assert.equal(observation.normalizedCallsign, "DM7EE");
+  assert.equal(observation.score, "36594");
+  assert.equal(observation.qsoTotal, "342");
+  assert.equal(observation.sourceTimestamp, null);
+  assert.equal(observation.sourceTimestampQuality, "UNZONED_SOURCE_TEXT");
+  assert.doesNotMatch(JSON.stringify(observation.rawMetrics), /auth/);
+
+  const discovery = parseContestRunDiscoveryResponse(
+    JSON.stringify([{ testid: 108, name: "WAE DX SSB" }, { testid: 0 }]),
+  );
+  assert.deepEqual(
+    discovery.records.map((record) => record.testid),
+    [108],
+  );
+  const categories = parseContestRunCategoriesResponse(
+    JSON.stringify([{ catid: 1, "ct-band": "20m" }]),
+  );
+  assert.equal(categories.records[0]?.["ct-band"], "20m");
+  assert.throws(
+    () => parseContestRunDisplayScoreResponse('{"not":"an array"}'),
+    /must be a JSON array/,
   );
 });
 
