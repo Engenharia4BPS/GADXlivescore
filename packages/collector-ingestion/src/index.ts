@@ -10,6 +10,14 @@ export {
   normalizeContestRunPayload,
   normalizeContestRunRow,
 } from "./contest-run.js";
+export type {
+  ContestRunDisplayScoreClient,
+  ContestRunDisplayScoreProbeResult,
+  ContestRunDisplayScoreSample,
+  ContestRunDisplayScoreSummary,
+  ContestRunDisplayScoreSummaryOptions,
+} from "./contest-run-readonly-summary.js";
+export { ContestRunDisplayScoreReadOnlyService } from "./contest-run-readonly-summary.js";
 export {
   type IngestionRepository,
   isExpectedSnapshotDuplicateError,

@@ -791,6 +791,40 @@ evidence, and enforcement of the two-contest category-fetch bound. It did not
 infer contest year, timezone, UTC timestamps, activity, or current-active
 state.
 
+### 21.4 Phase 2E.3 displayscore HTTP-to-normalization contract
+
+`ContestRunHttpClient.displayScore(testid)` uses the same bounded read-only GET
+policy and typed error model as discovery, and routes response bytes through
+`parseContestRunDisplayScoreResponse`. The read-only validation helper then
+uses the existing collector normalizer without any persistence operation. Its
+sanitized per-contest summary includes HTTP metadata, source/normalized/rejected
+row counts, date and unzoned-source-text counts, aggregate-to-band disagreement
+counts, observed `soft` types, unresolved `qtotalc`/`qtotalp`/`qtotalr` field
+presence, auth-redaction verification, and a small totals-only callsign sample.
+
+The helper makes no temporal claim from a single response: reset-like evidence
+is explicitly unassessed unless a separate bounded multi-snapshot validation is
+introduced. It retains the Phase 2E.1 normalization contract: offset-free
+`date` remains raw text with a null normalized timestamp and
+`UNZONED_SOURCE_TEXT` quality; source aggregate totals are never recomputed;
+row presence does not imply activity, freshness, reporting, or scoring. The
+guarded `poc:contest-run:displayscore` command is limited to testids `108` and
+`91`, makes at most two score requests, performs no database writes, and emits
+sanitized JSON only.
+
+### 21.5 Phase 2E.3 real read-only validation
+
+The real displayscore probe completed with `PASS`: exactly two bounded score
+requests, no database writes, and 244 of 244 source rows normalized successfully
+with zero rejected rows. Auth redaction was verified. All observed dates remained
+raw `UNZONED_SOURCE_TEXT`; no UTC or timezone inference was made. Real source
+heterogeneity was confirmed (`soft` appeared as string and number), while
+`qtotalc`, `qtotalp`, and `qtotalr` remained preserved unresolved evidence.
+
+Aggregate-to-band disagreement was observed for 169 of 240 rows in testid
+`108`; this does not alter the source-authoritative aggregate totals. No reset
+claim was made because the validation used one temporal sample per contest.
+
 ---
 
 ## 22. Contest discovery flow

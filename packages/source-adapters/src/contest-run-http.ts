@@ -2,15 +2,25 @@ import {
   CONTEST_RUN_BASE_URL,
   type ContestRunCategoriesResponse,
   type ContestRunDiscoveryResponse,
+  type ContestRunDisplayScoreResponse,
   contestRunEndpoint,
   parseContestRunCategoriesResponse,
   parseContestRunDiscoveryResponse,
+  parseContestRunDisplayScoreResponse,
 } from "./contest-run.js";
 
 const defaultMaxResponseBytes = 2 * 1024 * 1024;
 const defaultTimeoutMs = 20_000;
 
-export type ContestRunDiscoveryEndpoint = "nearest" | "month" | "categories";
+export type ContestRunHttpEndpoint =
+  | "nearest"
+  | "month"
+  | "categories"
+  | "displayscore";
+export type ContestRunDiscoveryEndpoint = Exclude<
+  ContestRunHttpEndpoint,
+  "displayscore"
+>;
 export type ContestRunHttpErrorCode =
   | "TIMEOUT"
   | "NETWORK"
@@ -21,7 +31,7 @@ export type ContestRunHttpErrorCode =
   | "ADAPTER_PARSE";
 
 export interface ContestRunHttpResponseMetadata {
-  endpoint: ContestRunDiscoveryEndpoint;
+  endpoint: ContestRunHttpEndpoint;
   status: number;
   durationMs: number;
   responseBytes: number;
@@ -46,13 +56,13 @@ export interface ContestRunHttpClientOptions {
 
 export class ContestRunHttpError extends Error {
   readonly code: ContestRunHttpErrorCode;
-  readonly endpoint: ContestRunDiscoveryEndpoint;
+  readonly endpoint: ContestRunHttpEndpoint;
   readonly metadata: ContestRunHttpResponseMetadata | null;
 
   constructor(input: {
     code: ContestRunHttpErrorCode;
     message: string;
-    endpoint: ContestRunDiscoveryEndpoint;
+    endpoint: ContestRunHttpEndpoint;
     metadata?: ContestRunHttpResponseMetadata;
     cause?: unknown;
   }) {
@@ -106,8 +116,18 @@ export class ContestRunHttpClient {
     );
   }
 
+  async displayScore(
+    testId: number,
+  ): Promise<ContestRunHttpResponse<ContestRunDisplayScoreResponse>> {
+    return this.request(
+      "displayscore",
+      testId,
+      parseContestRunDisplayScoreResponse,
+    );
+  }
+
   private async request<T>(
-    endpoint: ContestRunDiscoveryEndpoint,
+    endpoint: ContestRunHttpEndpoint,
     value: number | undefined,
     parse: (body: Uint8Array) => T,
   ): Promise<ContestRunHttpResponse<T>> {
@@ -195,7 +215,7 @@ export class ContestRunHttpClient {
 }
 
 function endpointUrl(
-  endpoint: ContestRunDiscoveryEndpoint,
+  endpoint: ContestRunHttpEndpoint,
   value: number | undefined,
   baseUrl: string,
 ): string {
@@ -206,6 +226,8 @@ function endpointUrl(
       return contestRunEndpoint("month", value, baseUrl);
     case "categories":
       return contestRunEndpoint("categories", value, baseUrl);
+    case "displayscore":
+      return contestRunEndpoint("displayscore", value, baseUrl);
   }
 }
 

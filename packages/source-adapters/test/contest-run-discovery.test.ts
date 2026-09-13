@@ -75,6 +75,95 @@ test("HTTP client fetches categories with a validated contest.run testid", async
   assert.equal(requestCount, requestsBeforeInvalidInput);
 });
 
+test("HTTP client fetches displayscore through the redacting source parser", async () => {
+  let requestCount = 0;
+  const client = new ContestRunHttpClient({
+    fetch: async (url, init) => {
+      requestCount += 1;
+      assert.equal(new URL(url).pathname, "/api/displayscore/108");
+      assert.equal(new Headers(init.headers).get("accept"), "application/json");
+      return jsonResponse([
+        {
+          sign: "DM7EE",
+          score: 36594,
+          auth: "must-not-leave-source-adapter",
+          nested: { AUTH: "must-not-leave-source-adapter" },
+        },
+      ]);
+    },
+  });
+
+  const result = await client.displayScore(108);
+  assert.equal(result.metadata.endpoint, "displayscore");
+  assert.equal(result.data.records[0]?.sign, "DM7EE");
+  assert.doesNotMatch(JSON.stringify(result.data), /auth|must-not-leave/i);
+  const requestsBeforeInvalidInput = requestCount;
+  await assert.rejects(
+    client.displayScore(0),
+    /testid must be a positive 32-bit integer/,
+  );
+  assert.equal(requestCount, requestsBeforeInvalidInput);
+});
+
+test("displayscore preserves the common typed HTTP error model", async () => {
+  const non2xxClient = new ContestRunHttpClient({
+    fetch: async () => new Response("unavailable", { status: 503 }),
+  });
+  await assert.rejects(non2xxClient.displayScore(108), (error: unknown) => {
+    assert(error instanceof ContestRunHttpError);
+    assert.equal(error.code, "NON_2XX");
+    assert.equal(error.endpoint, "displayscore");
+    return true;
+  });
+
+  const timeoutClient = new ContestRunHttpClient({
+    timeoutMs: 1,
+    fetch: async () => {
+      throw new DOMException("request aborted", "AbortError");
+    },
+  });
+  await assert.rejects(timeoutClient.displayScore(108), (error: unknown) => {
+    assert(error instanceof ContestRunHttpError);
+    assert.equal(error.code, "TIMEOUT");
+    return true;
+  });
+
+  const invalidJsonClient = new ContestRunHttpClient({
+    fetch: async () =>
+      new Response("not JSON", { status: 200, headers: jsonHeaders }),
+  });
+  await assert.rejects(
+    invalidJsonClient.displayScore(108),
+    (error: unknown) => {
+      assert(error instanceof ContestRunHttpError);
+      assert.equal(error.code, "ADAPTER_PARSE");
+      return true;
+    },
+  );
+
+  const invalidContentClient = new ContestRunHttpClient({
+    fetch: async () => new Response("[]", { status: 200 }),
+  });
+  await assert.rejects(
+    invalidContentClient.displayScore(108),
+    (error: unknown) => {
+      assert(error instanceof ContestRunHttpError);
+      assert.equal(error.code, "INVALID_CONTENT");
+      return true;
+    },
+  );
+
+  const oversizedClient = new ContestRunHttpClient({
+    maxResponseBytes: 5,
+    fetch: async () => jsonResponse([{ sign: "DM7EE" }]),
+  });
+  await assert.rejects(oversizedClient.displayScore(108), (error: unknown) => {
+    assert(error instanceof ContestRunHttpError);
+    assert.equal(error.code, "RESPONSE_TOO_LARGE");
+    return true;
+  });
+});
+
 test("HTTP client surfaces non-2xx response metadata without retaining a body", async () => {
   const client = new ContestRunHttpClient({
     fetch: async () => new Response("temporarily unavailable", { status: 503 }),

@@ -35,6 +35,7 @@ export type {
   ContestRunDiscoveryEndpoint,
   ContestRunFetch,
   ContestRunHttpClientOptions,
+  ContestRunHttpEndpoint,
   ContestRunHttpErrorCode,
   ContestRunHttpResponse,
   ContestRunHttpResponseMetadata,
