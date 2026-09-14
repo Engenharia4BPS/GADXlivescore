@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { normalizeContestRunDisplayScoreResponse } from "../src/contest-run.js";
 import {
   decideSingleSourceSequence,
   type NormalizedScoreObservation,
@@ -217,6 +218,51 @@ test("PHP canonical reconciliation fixture remains derived from the TypeScript p
     createHash("sha256").update(fixture.out_of_order.input).digest("hex"),
     fixture.out_of_order.expected_hex,
   );
+});
+
+test("PHP contest.run displayscore fixture remains derived from the TypeScript adapter", () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../fixtures/parity/php-contest-run-displayscore-v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as { expected: Record<string, string | number>; payload: unknown[] };
+  const normalized = normalizeContestRunDisplayScoreResponse(
+    { records: fixture.payload as [] },
+    {
+      sourceId: "1",
+      contestId: "2",
+      receivedAt: "2026-09-14 00:00:00.000000",
+      messageKind: "CONTEST_RUN_DISPLAYSCORE",
+      payload: new Uint8Array(),
+      payloadRedacted: new Uint8Array(),
+      payloadSha256: new Uint8Array(32),
+      redactionMetadata: null,
+      requestPathRedacted: "/api/displayscore/108",
+      responseHeadersRedacted: null,
+    },
+  );
+  assert.equal(normalized.observations.length, fixture.expected.accepted);
+  assert.equal(normalized.rejected.length, fixture.expected.rejected);
+  const first = normalized.observations[0];
+  assert(first);
+  assert.equal(first.normalizedCallsign, fixture.expected.normalized_callsign);
+  assert.equal(
+    first.sourceTimestampQuality,
+    fixture.expected.timestamp_quality,
+  );
+  assert.equal(first.qsoTotal, fixture.expected.qso_total);
+  assert(
+    first.fingerprintEvidence && !Array.isArray(first.fingerprintEvidence),
+  );
+  assert.equal(
+    (first.fingerprintEvidence as Record<string, unknown>).soft,
+    fixture.expected.soft_string,
+  );
+  assert.equal(first.bands.length, fixture.expected.band_count);
 });
 
 function toObservation(

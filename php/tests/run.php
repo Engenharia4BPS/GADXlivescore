@@ -22,6 +22,8 @@ use Araucaria\Livescore\Ingestion\PdoIngestionRepository;
 use Araucaria\Livescore\Ingestion\ReceiptResult;
 use Araucaria\Livescore\Ingestion\SingleSourcePolicy;
 use Araucaria\Livescore\Ingestion\CanonicalReconciliationResult;
+use Araucaria\Livescore\ContestRun\DisplayScoreAdapter;
+use Araucaria\Livescore\ContestRun\DisplayScoreIngestion;
 use PDOException;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -156,6 +158,15 @@ $tests = [
         assertSameValue('CANONICAL_INITIAL', CanonicalReconciliationResult::initial('9001')->outcome);
         assertSameValue('9001', CanonicalReconciliationResult::initial('9001')->canonicalEventId);
     },
+    'contest.run displayscore PHP adapter matches source normalization distinctions' => static function (): void {
+        $adapter = new DisplayScoreAdapter(); $fixture = contestRunDisplayScoreFixture();
+        $receipt = new \Araucaria\Livescore\Ingestion\RedactedReceipt('1', '2', null, null, '2026-09-14 00:00:00.000000', 'CONTEST_RUN_DISPLAYSCORE', 'GET', '/api/displayscore/108', 200, 'application/json', null, '[]', Sha256::binary('[]'), null, null);
+        $batch = $adapter->normalizePayload(JsonCodec::encodeDatabaseValue($fixture['payload']), $receipt);
+        assertSameValue($fixture['expected']['accepted'], count($batch['observations'])); assertSameValue($fixture['expected']['rejected'], count($batch['rejected']));
+        $first = $batch['observations'][0]; assertSameValue($fixture['expected']['normalized_callsign'], $first->normalizedCallsign); assertSameValue(null, $first->sourceTimestamp); assertSameValue($fixture['expected']['timestamp_quality'], $first->sourceTimestampQuality); assertSameValue($fixture['expected']['qso_total'], $first->qsoTotal); assertSameValue(['soft' => $fixture['expected']['soft_string'], 'qtotalc' => 7, 'qtotalp' => 8, 'qtotalr' => 9], $first->fingerprintEvidence); assertSameValue($fixture['expected']['band_count'], count($first->bands));
+        assertSameValue('4', $batch['observations'][1]->fingerprintEvidence['soft']);
+        assertSameValue(false, str_contains(DisplayScoreIngestion::redactPayload('[{"auth":"secret","nested":{"AUTH":"secret","ok":true}}]'), 'secret'));
+    },
 ];
 
 $failures = 0;
@@ -167,6 +178,16 @@ foreach ($tests as $name => $test) {
         $failures++;
         fwrite(STDERR, "FAIL {$name}: " . $error->getMessage() . "\n");
     }
+}
+
+/** @return array<string, mixed> */
+function contestRunDisplayScoreFixture(): array
+{
+    $contents = file_get_contents(dirname(__DIR__, 2) . '/fixtures/parity/php-contest-run-displayscore-v1.json');
+    if ($contents === false) throw new RuntimeException('contest.run fixture cannot be read.');
+    $fixture = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($fixture)) throw new RuntimeException('contest.run fixture must be an object.');
+    return $fixture;
 }
 
 fwrite(STDOUT, sprintf("PHP foundation tests: %d passed, %d failed\n", count($tests) - $failures, $failures));

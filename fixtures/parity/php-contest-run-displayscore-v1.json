@@ -1,0 +1,32 @@
+{
+  "reference": "packages/collector-ingestion/src/contest-run.ts",
+  "payload": [
+    {
+      "sign": " dm7ee ",
+      "date": "2026-09-11 20:35:30",
+      "score": 36594,
+      "qtotal": 342,
+      "ptotal": 100,
+      "mtotal": 107,
+      "q80": 10,
+      "q40": 20,
+      "qtotalc": 7,
+      "qtotalp": 8,
+      "qtotalr": 9,
+      "soft": "4",
+      "auth": "fixture-secret",
+      "nested": { "AUTH": "fixture-secret", "ok": true }
+    },
+    { "sign": "PA6Y", "soft": 4 },
+    null
+  ],
+  "expected": {
+    "accepted": 2,
+    "rejected": 1,
+    "normalized_callsign": "DM7EE",
+    "timestamp_quality": "UNZONED_SOURCE_TEXT",
+    "qso_total": "342",
+    "soft_string": "4",
+    "band_count": 6
+  }
+}

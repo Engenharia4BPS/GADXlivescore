@@ -215,6 +215,28 @@ no contest.run HTTP request, accessed no production database, and made no
 schema change. Collector entrypoints remain disabled. No Phase 2F.3 canonical
 persistence was performed; canonical database writes remain deferred to 2F.3.
 
+## contest.run displayscore MVP slice
+
+The PHP MVP has an explicit cURL HTTPS GET boundary for
+`/api/displayscore/<testid>` and a pure adapter matching the committed
+TypeScript normalizer. Auth keys are recursively removed from stored evidence,
+source dates remain `UNZONED_SOURCE_TEXT` with no inferred UTC timestamp,
+aggregate source totals are retained independently of band sums, `soft` accepts
+string or number, and `qtotalc`, `qtotalp`, and `qtotalr` remain fingerprint
+evidence. Invalid row positions are rejected without discarding valid rows.
+
+It invokes the established receipt/persistence/canonical service; no polling or
+Cron entrypoint is enabled. The prepared, unrun guarded integration command is:
+
+```text
+PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-contest-run-displayscore-probe.php
+```
+
+It requires both test-schema guards, fetches known test ID `108`, writes only
+unique synthetic fixture rows in `dxarauca_livescore_test`, prints a sanitized
+count summary, and cleans those rows. It has not been run; no MVP real PASS is
+claimed.
+
 ## Phase 2F.3 canonical reconciliation
 
 Phase 2F.3 reconciles each newly accepted snapshot in its own short PDO
