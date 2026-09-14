@@ -1,0 +1,213 @@
+{
+  "schema_version": 1,
+  "reference": "packages/collector-ingestion/src/canonical.ts",
+  "sha256": {
+    "utf8": "{\"score\":36594,\"qtotal\":342}",
+    "expected_hex": "e3dd3a5c3afd0dda93a46a38bd80fabdf315a08086f224cc000850807b19a2e9"
+  },
+  "canonical_json": {
+    "input": {
+      "z": "é",
+      "a": [1, "1", null],
+      "nested": {
+        "b": false,
+        "a": true
+      }
+    },
+    "expected": "{\"a\":[1,\"1\",null],\"nested\":{\"a\":true,\"b\":false},\"z\":\"é\"}"
+  },
+  "normalized_fingerprints": [
+    {
+      "name": "aggregate-band-disagreement-and-qtotal-evidence",
+      "observation": {
+        "source_id": "101",
+        "contest_id": "202",
+        "normalized_callsign": "DM7EE",
+        "category_id": null,
+        "category_raw": null,
+        "source_timestamp": null,
+        "source_timestamp_raw": "2026-09-11 12:00:00",
+        "source_timestamp_quality": "UNZONED_SOURCE_TEXT",
+        "score": "36594",
+        "qso_total": "342",
+        "points_total": "50000",
+        "mult_total": "107",
+        "source_evidence": {
+          "soft": "1",
+          "qtotalc": 12,
+          "qtotalp": 34,
+          "qtotalr": 56
+        },
+        "bands": [
+          {
+            "band": "80m",
+            "mode": "ALL",
+            "qso": "10",
+            "points": "1000",
+            "mult1": "7",
+            "mult2": null
+          },
+          {
+            "band": "40m",
+            "mode": "ALL",
+            "qso": "20",
+            "points": "2000",
+            "mult1": "2",
+            "mult2": null
+          }
+        ]
+      },
+      "expected_hex": "037f663bcc5eff1d7c48391a0e2adc0cb978ab27d9aa10407a6a4cc7183e02ed"
+    },
+    {
+      "name": "timestamp-only-difference",
+      "observation": {
+        "source_id": "101",
+        "contest_id": "202",
+        "normalized_callsign": "DM7EE",
+        "category_id": null,
+        "category_raw": null,
+        "source_timestamp": null,
+        "source_timestamp_raw": "2026-09-11 12:01:00",
+        "source_timestamp_quality": "UNZONED_SOURCE_TEXT",
+        "score": "36594",
+        "qso_total": "342",
+        "points_total": "50000",
+        "mult_total": "107",
+        "source_evidence": {
+          "soft": "1",
+          "qtotalc": 12,
+          "qtotalp": 34,
+          "qtotalr": 56
+        },
+        "bands": [
+          {
+            "band": "80m",
+            "mode": "ALL",
+            "qso": "10",
+            "points": "1000",
+            "mult1": "7",
+            "mult2": null
+          },
+          {
+            "band": "40m",
+            "mode": "ALL",
+            "qso": "20",
+            "points": "2000",
+            "mult1": "2",
+            "mult2": null
+          }
+        ]
+      },
+      "expected_hex": "0005047376ab12d7460455e8734390c41b7c9c2c71a0b79cdc41b2fe685f7fbc"
+    },
+    {
+      "name": "score-qso-mult-reset",
+      "observation": {
+        "source_id": "101",
+        "contest_id": "202",
+        "normalized_callsign": "DM7EE",
+        "category_id": null,
+        "category_raw": null,
+        "source_timestamp": null,
+        "source_timestamp_raw": "2026-09-11 12:02:00",
+        "source_timestamp_quality": "UNZONED_SOURCE_TEXT",
+        "score": "0",
+        "qso_total": "0",
+        "points_total": "50000",
+        "mult_total": "0",
+        "source_evidence": {
+          "soft": "1",
+          "qtotalc": 12,
+          "qtotalp": 34,
+          "qtotalr": 56
+        },
+        "bands": [
+          {
+            "band": "80m",
+            "mode": "ALL",
+            "qso": "10",
+            "points": "1000",
+            "mult1": "7",
+            "mult2": null
+          },
+          {
+            "band": "40m",
+            "mode": "ALL",
+            "qso": "20",
+            "points": "2000",
+            "mult1": "2",
+            "mult2": null
+          }
+        ]
+      },
+      "expected_hex": "c39a8c6333e1c8f76d0f5ae6750cdeaaf2c0e39094454c5f93c2bb08144a3d22"
+    },
+    {
+      "name": "band-order-invariant",
+      "observation": {
+        "source_id": "101",
+        "contest_id": "202",
+        "normalized_callsign": "DM7EE",
+        "category_id": null,
+        "category_raw": null,
+        "source_timestamp": null,
+        "source_timestamp_raw": "2026-09-11 12:00:00",
+        "source_timestamp_quality": "UNZONED_SOURCE_TEXT",
+        "score": "36594",
+        "qso_total": "342",
+        "points_total": "50000",
+        "mult_total": "107",
+        "source_evidence": {
+          "qtotalr": 56,
+          "soft": "1",
+          "qtotalp": 34,
+          "qtotalc": 12
+        },
+        "bands": [
+          {
+            "band": "40m",
+            "mode": "ALL",
+            "qso": "20",
+            "points": "2000",
+            "mult1": "2",
+            "mult2": null
+          },
+          {
+            "band": "80m",
+            "mode": "ALL",
+            "qso": "10",
+            "points": "1000",
+            "mult1": "7",
+            "mult2": null
+          }
+        ]
+      },
+      "expected_hex": "037f663bcc5eff1d7c48391a0e2adc0cb978ab27d9aa10407a6a4cc7183e02ed"
+    }
+  ],
+  "out_of_order_diagnostic": {
+    "snapshot_id": "9001",
+    "expected_hex": "5aba008560e718b7189d1921d44c9f3eb8c8f3c89ec8fa8fe1b664bd6684551c"
+  },
+  "contest_run_value_conventions": {
+    "callsign": {
+      "input": " dm7ee ",
+      "expected_normalized": "DM7EE"
+    },
+    "soft": [
+      { "input": 1, "expected_fingerprint_evidence": "1" },
+      { "input": "1", "expected_fingerprint_evidence": "1" }
+    ],
+    "qtotal_evidence": {
+      "qtotalc": 12,
+      "qtotalp": 34,
+      "qtotalr": 56
+    },
+    "aggregate_band_disagreement": {
+      "aggregate_qso_total": "342",
+      "band_qso_sum": "30",
+      "aggregate_is_authoritative": true
+    }
+  }
+}
