@@ -21,6 +21,7 @@ use Araucaria\Livescore\Ingestion\ObservationPersistenceResult;
 use Araucaria\Livescore\Ingestion\PdoIngestionRepository;
 use Araucaria\Livescore\Ingestion\ReceiptResult;
 use Araucaria\Livescore\Ingestion\SingleSourcePolicy;
+use Araucaria\Livescore\Ingestion\CanonicalReconciliationResult;
 use PDOException;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -144,6 +145,17 @@ $tests = [
     'ordinary JSON evidence preserves non-canonical insertion order' => static function (): void {
         assertSameValue('{"z":1,"a":2}', JsonCodec::encodeDatabaseValue(['z' => 1, 'a' => 2]));
     },
+    'canonical reconciliation fixture preserves policy and event constants' => static function (): void {
+        $fixture = canonicalFixture();
+        assertSameValue('SINGLE_SOURCE_SEQUENCE', $fixture['selection']['basis']);
+        assertSameValue('INITIAL_CANONICAL', $fixture['selection']['initial_reason']);
+        assertSameValue('SAME_SOURCE_NONDECREASING_EFFECTIVE_AT', $fixture['selection']['advanced_reason']);
+        foreach ($fixture['vectors'] as $vector) assertSameValue($vector['outcome'], SingleSourcePolicy::decide($vector['candidate'], $vector['current']));
+        assertSameValue($fixture['out_of_order']['expected_hex'], SnapshotFingerprint::outOfOrderDiagnosticHex($fixture['out_of_order']['snapshot_id']));
+        assertSameValue(32, strlen(hex2bin($fixture['out_of_order']['expected_hex']) ?: ''));
+        assertSameValue('CANONICAL_INITIAL', CanonicalReconciliationResult::initial('9001')->outcome);
+        assertSameValue('9001', CanonicalReconciliationResult::initial('9001')->canonicalEventId);
+    },
 ];
 
 $failures = 0;
@@ -185,6 +197,16 @@ function ingestionFixture(): array
     if ($contents === false) throw new RuntimeException('Ingestion fixture cannot be read.');
     $fixture = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
     if (!is_array($fixture)) throw new RuntimeException('Ingestion fixture must be an object.');
+    return $fixture;
+}
+
+/** @return array<string, mixed> */
+function canonicalFixture(): array
+{
+    $contents = file_get_contents(dirname(__DIR__, 2) . '/fixtures/parity/php-canonical-reconciliation-v1.json');
+    if ($contents === false) throw new RuntimeException('Canonical fixture cannot be read.');
+    $fixture = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($fixture)) throw new RuntimeException('Canonical fixture must be an object.');
     return $fixture;
 }
 

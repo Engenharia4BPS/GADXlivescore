@@ -158,6 +158,67 @@ test("PHP ingestion persistence fixture remains derived from the TypeScript cont
   }
 });
 
+test("PHP canonical reconciliation fixture remains derived from the TypeScript policy", () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../fixtures/parity/php-canonical-reconciliation-v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as {
+    out_of_order: { expected_hex: string; input: string };
+    selection: {
+      advanced_reason: string;
+      basis: string;
+      initial_reason: string;
+    };
+    vectors: Array<{
+      candidate: {
+        acceptance_status: string;
+        source_id: string;
+        source_timestamp: string | null;
+        source_timestamp_quality: string | null;
+      };
+      current: { effective_at: string; source_id: string } | null;
+      outcome: string;
+    }>;
+  };
+  assert.deepEqual(fixture.selection, {
+    basis: "SINGLE_SOURCE_SEQUENCE",
+    initial_reason: "INITIAL_CANONICAL",
+    advanced_reason: "SAME_SOURCE_NONDECREASING_EFFECTIVE_AT",
+  });
+  for (const vector of fixture.vectors) {
+    assert.equal(
+      decideSingleSourceSequence(
+        {
+          acceptanceStatus: vector.candidate.acceptance_status,
+          entryId: "1",
+          snapshotId: "1",
+          sourceId: vector.candidate.source_id,
+          sourceTimestamp: vector.candidate.source_timestamp,
+          sourceTimestampQuality: vector.candidate.source_timestamp_quality,
+        },
+        vector.current === null
+          ? undefined
+          : {
+              eventId: "1",
+              snapshotId: "1",
+              sourceId: vector.current.source_id,
+              effectiveAt: vector.current.effective_at,
+            },
+      ).outcome,
+      vector.outcome,
+    );
+  }
+  assert.equal(
+    createHash("sha256").update(fixture.out_of_order.input).digest("hex"),
+    fixture.out_of_order.expected_hex,
+  );
+});
+
 function toObservation(
   value: Record<string, unknown>,
 ): NormalizedScoreObservation {

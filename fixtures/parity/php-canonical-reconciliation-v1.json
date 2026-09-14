@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "reference": "packages/collector-ingestion/src/single-source-policy.ts",
+  "selection": {
+    "basis": "SINGLE_SOURCE_SEQUENCE",
+    "initial_reason": "INITIAL_CANONICAL",
+    "advanced_reason": "SAME_SOURCE_NONDECREASING_EFFECTIVE_AT"
+  },
+  "vectors": [
+    {
+      "name": "unzoned",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "1",
+        "source_timestamp": null,
+        "source_timestamp_quality": "UNZONED_SOURCE_TEXT"
+      },
+      "current": null,
+      "outcome": "INELIGIBLE_TIMESTAMP"
+    },
+    {
+      "name": "initial",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "1",
+        "source_timestamp": "2026-09-14 12:00:00.000001",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": null,
+      "outcome": "CANONICAL_INITIAL",
+      "reason": "INITIAL_CANONICAL"
+    },
+    {
+      "name": "newer",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "1",
+        "source_timestamp": "2026-09-14 12:00:00.000002",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": {
+        "source_id": "1",
+        "effective_at": "2026-09-14 12:00:00.000001"
+      },
+      "outcome": "CANONICAL_ADVANCED",
+      "reason": "SAME_SOURCE_NONDECREASING_EFFECTIVE_AT"
+    },
+    {
+      "name": "equal",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "1",
+        "source_timestamp": "2026-09-14 12:00:00.1",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": {
+        "source_id": "1",
+        "effective_at": "2026-09-14 12:00:00.100000"
+      },
+      "outcome": "CANONICAL_ADVANCED"
+    },
+    {
+      "name": "older",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "1",
+        "source_timestamp": "2026-09-14 12:00:00",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": { "source_id": "1", "effective_at": "2026-09-14 12:00:01" },
+      "outcome": "OUT_OF_ORDER"
+    },
+    {
+      "name": "different-source",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "2",
+        "source_timestamp": "2026-09-14 12:00:02",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": { "source_id": "1", "effective_at": "2026-09-14 12:00:01" },
+      "outcome": "DEFERRED_CROSS_SOURCE_POLICY"
+    },
+    {
+      "name": "reset-later",
+      "candidate": {
+        "acceptance_status": "ACCEPTED",
+        "source_id": "1",
+        "source_timestamp": "2026-09-14 12:00:02",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": { "source_id": "1", "effective_at": "2026-09-14 12:00:01" },
+      "outcome": "CANONICAL_ADVANCED"
+    },
+    {
+      "name": "not-accepted",
+      "candidate": {
+        "acceptance_status": "REJECTED",
+        "source_id": "1",
+        "source_timestamp": "2026-09-14 12:00:02",
+        "source_timestamp_quality": "CONFIRMED_UTC"
+      },
+      "current": null,
+      "outcome": "INELIGIBLE_TIMESTAMP"
+    }
+  ],
+  "out_of_order": {
+    "snapshot_id": "9001",
+    "input": "OUT_OF_ORDER|9001",
+    "expected_hex": "5aba008560e718b7189d1921d44c9f3eb8c8f3c89ec8fa8fe1b664bd6684551c"
+  }
+}

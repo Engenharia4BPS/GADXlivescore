@@ -215,6 +215,65 @@ no contest.run HTTP request, accessed no production database, and made no
 schema change. Collector entrypoints remain disabled. No Phase 2F.3 canonical
 persistence was performed; canonical database writes remain deferred to 2F.3.
 
+## Phase 2F.3 canonical reconciliation
+
+Phase 2F.3 reconciles each newly accepted snapshot in its own short PDO
+transaction, after the observation-persistence transaction has committed and
+before receipt finalization. The transaction loads the candidate, locks its
+exact `entries.id` row with `FOR UPDATE`, reads canonical state only through
+the `current_scores` pointer joined to its event and snapshot, applies the pure
+`SingleSourcePolicy`, then commits any event/pointer/diagnostic mutation.
+Neither HTTP nor receipt creation/persistence/finalization is inside this
+transaction.
+
+Eligible initial and same-source nondecreasing snapshots append a
+`canonical_score_events` row with `SINGLE_SOURCE_SEQUENCE`, respectively
+`INITIAL_CANONICAL` or `SAME_SOURCE_NONDECREASING_EFFECTIVE_AT`, and install or
+update the exact `current_scores` pointer. The timeline is append-only. An
+older same-source snapshot leaves the pointer unchanged and creates one
+deduplicated `OUT_OF_ORDER` flag with binary SHA-256 over
+`OUT_OF_ORDER|<snapshot-id>` and ordinary JSON current-pointer evidence.
+Ineligible and cross-source candidates write none of the three canonical
+tables; cross-source precedence remains out of scope.
+
+`NormalizedIngestionService` obtains one UTC reconciliation timestamp per
+accepted batch and uses it for every accepted snapshot; duplicates and
+rejections are not reconciled. Reconciliation failure leaves previously
+committed snapshots durable and finalizes the receipt as sanitized `FAILED`.
+The shared `php-canonical-reconciliation-v1.json` fixture is derived from the
+TypeScript policy. A guarded, synthetic-fixture-only Phase 2F.3 cPanel probe
+is prepared at `php/bin/cpanel-canonical-probe.php`; it requires
+`PHP_COLLECTOR_TEST_ONLY=1` and both test-schema guards.
+
+### Phase 2F.3 authoritative real validation
+
+The final guarded canonical probe ran on actual cPanel PHP **8.3.33** against
+only `dxarauca_livescore_test`. The dependency-free PHP suite completed with
+**14 passed, 0 failed**. The authoritative probe returned exit code **0** and
+`PHP_CANONICAL_PROBE_PASS` for fixture `php-2f3-a37d3399b9a9c4c3` at
+`2026-09-14 16:08:01.944908`.
+
+It validated `INELIGIBLE_TIMESTAMP`, initial canonical selection, newer and
+equal-timestamp same-source advances, reset/decrease advancement,
+`OUT_OF_ORDER` plus repeated diagnostic deduplication,
+`DEFERRED_CROSS_SOURCE_POLICY`, and `NormalizedIngestionService`
+orchestration. It verified append-only canonical events, exact current-score
+pointers, a 32-byte diagnostic fingerprint, exactly one repeated diagnostic
+flag, and `cleanup_remaining_fixture_rows = 0`. No HTTP, production database
+access, schema change, or deployment occurred.
+
+An earlier probe run failed only in the harness: strict PHP associative-array
+comparison accidentally required MySQL JSON object-key order. The corrected
+probe checks each evidence field semantically; production reconciliation was
+not changed or weakened. That failed run still entered strict cleanup and never
+emitted PASS.
+
+Forced reconciliation failure after persistence and forced rollback between
+event and pointer writes remain audit-only. No artificial production test seam
+was added. Structurally, reconciliation is one short PDO transaction ordered
+candidate lookup → `entries ... FOR UPDATE` → current lookup → policy →
+event/flag/current writes → commit; an exception rolls back that transaction.
+
 ### Linux shell line endings
 
 All shell scripts deployed to cPanel/Linux must use LF line endings. An

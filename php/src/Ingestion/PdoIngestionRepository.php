@@ -53,6 +53,40 @@ final class PdoIngestionRepository
         $statement->execute([$result->status, $processedAt, $result->observationCount, $result->acceptedCount, $result->duplicateCount, $result->rejectedCount, $this->json($parseError), $rawMessageId]);
     }
 
+    /** One short serialization transaction per accepted snapshot. */
+    public function reconcileAcceptedSnapshot(string $snapshotId, string $reconciledAt): CanonicalReconciliationResult
+    {
+        $this->connection->beginTransaction();
+        try {
+            $candidate = $this->one('SELECT acceptance_status, entry_id, id AS snapshot_id, source_id, source_timestamp, source_timestamp_quality FROM score_snapshots WHERE id = ?', [$snapshotId], 'Accepted snapshot disappeared before reconciliation.');
+            // This exact row lock serializes all canonical decisions for the entry.
+            $this->one('SELECT id FROM entries WHERE id = ? FOR UPDATE', [(string) $candidate['entry_id']], 'Accepted snapshot disappeared before reconciliation.');
+            $current = $this->optional('SELECT event.effective_at, event.id AS event_id, snapshot.id AS snapshot_id, snapshot.source_id FROM current_scores current INNER JOIN canonical_score_events event ON event.id = current.canonical_event_id INNER JOIN score_snapshots snapshot ON snapshot.id = event.score_snapshot_id WHERE current.entry_id = ?', [(string) $candidate['entry_id']]);
+            $decision = SingleSourcePolicy::decide([
+                'acceptance_status' => (string) $candidate['acceptance_status'], 'source_id' => (string) $candidate['source_id'], 'source_timestamp' => $candidate['source_timestamp'] === null ? null : (string) $candidate['source_timestamp'], 'source_timestamp_quality' => $candidate['source_timestamp_quality'] === null ? null : (string) $candidate['source_timestamp_quality'],
+            ], $current === null ? null : ['source_id' => (string) $current['source_id'], 'effective_at' => (string) $current['effective_at']]);
+            if ($decision === 'INELIGIBLE_TIMESTAMP' || $decision === 'DEFERRED_CROSS_SOURCE_POLICY') { $this->connection->commit(); return CanonicalReconciliationResult::policy($decision); }
+            if ($decision === 'OUT_OF_ORDER') { $this->appendOutOfOrderFlag((string) $candidate['snapshot_id'], $reconciledAt, $current); $this->connection->commit(); return CanonicalReconciliationResult::policy($decision); }
+            $effectiveAt = $candidate['source_timestamp']; if ($effectiveAt === null) throw new RuntimeException('Eligible snapshot is missing a source timestamp.');
+            $reason = $decision === 'CANONICAL_INITIAL' ? 'INITIAL_CANONICAL' : 'SAME_SOURCE_NONDECREASING_EFFECTIVE_AT';
+            $insert = $this->connection->prepare("INSERT INTO canonical_score_events (entry_id, score_snapshot_id, selected_at, effective_at, selection_basis, selection_reason, context) VALUES (?, ?, ?, ?, 'SINGLE_SOURCE_SEQUENCE', ?, NULL)");
+            $insert->execute([(string) $candidate['entry_id'], (string) $candidate['snapshot_id'], $reconciledAt, (string) $effectiveAt, $reason]);
+            $eventId = $this->lastInsertId('Canonical event insert returned no id.');
+            if ($current === null) {
+                $pointer = $this->connection->prepare('INSERT INTO current_scores (entry_id, canonical_event_id, canonical_snapshot_id, updated_at) VALUES (?, ?, ?, ?)');
+                $pointer->execute([(string) $candidate['entry_id'], $eventId, (string) $candidate['snapshot_id'], $reconciledAt]);
+            } else {
+                $pointer = $this->connection->prepare('UPDATE current_scores SET canonical_event_id = ?, canonical_snapshot_id = ?, updated_at = ? WHERE entry_id = ?');
+                $pointer->execute([$eventId, (string) $candidate['snapshot_id'], $reconciledAt, (string) $candidate['entry_id']]);
+            }
+            $this->connection->commit();
+            return $decision === 'CANONICAL_INITIAL' ? CanonicalReconciliationResult::initial($eventId) : CanonicalReconciliationResult::advanced($eventId);
+        } catch (\Throwable $error) {
+            if ($this->connection->inTransaction()) $this->connection->rollBack();
+            throw $error;
+        }
+    }
+
     public static function isExpectedSnapshotDuplicateError(PDOException $error): bool
     {
         $info = $error->errorInfo;
@@ -60,6 +94,13 @@ final class PdoIngestionRepository
         $errno = is_array($info) && isset($info[1]) ? (int) $info[1] : 0;
         $message = (is_array($info) && isset($info[2]) ? (string) $info[2] : '') . ' ' . $error->getMessage();
         return $sqlState === '23000' && $errno === 1062 && str_contains($message, 'uq_score_snapshots_entry_source_fingerprint');
+    }
+
+    public static function isExpectedSnapshotFlagDuplicateError(PDOException $error): bool
+    {
+        $info = $error->errorInfo; $state = is_array($info) && isset($info[0]) ? (string) $info[0] : ''; $errno = is_array($info) && isset($info[1]) ? (int) $info[1] : 0;
+        $message = (is_array($info) && isset($info[2]) ? (string) $info[2] : '') . ' ' . $error->getMessage();
+        return $state === '23000' && $errno === 1062 && str_contains($message, 'uq_score_snapshot_flags_snapshot_diagnostic');
     }
 
     private function persistOne(string $rawMessageId, string $receivedAt, NormalizedScoreObservation $observation): ObservationPersistenceResult
@@ -109,6 +150,30 @@ final class PdoIngestionRepository
         $id = $this->connection->lastInsertId();
         if (preg_match('/^\d+$/', $id) !== 1) throw new RuntimeException($failure);
         return $id;
+    }
+
+    private function appendOutOfOrderFlag(string $snapshotId, string $detectedAt, ?array $current): void
+    {
+        $fingerprint = SnapshotFingerprint::outOfOrderDiagnosticHex($snapshotId); $binary = hex2bin($fingerprint);
+        if ($binary === false || strlen($binary) !== 32) throw new RuntimeException('Diagnostic fingerprint must be 32 binary bytes.');
+        $existing = $this->connection->prepare('SELECT id FROM score_snapshot_flags WHERE snapshot_id = ? AND diagnostic_fingerprint = ?'); $existing->execute([$snapshotId, $binary]);
+        if ($existing->fetchColumn() !== false) return;
+        $details = $current === null ? null : ['current_canonical_event_id' => (string) $current['event_id'], 'current_canonical_snapshot_id' => (string) $current['snapshot_id'], 'current_effective_at' => (string) $current['effective_at']];
+        try {
+            $statement = $this->connection->prepare("INSERT INTO score_snapshot_flags (snapshot_id, flag, detected_at, details, diagnostic_fingerprint) VALUES (?, 'OUT_OF_ORDER', ?, ?, ?)");
+            $statement->execute([$snapshotId, $detectedAt, $this->json($details), $binary]);
+        } catch (PDOException $error) { if (!self::isExpectedSnapshotFlagDuplicateError($error)) throw $error; }
+    }
+
+    private function optional(string $sql, array $params): ?array
+    {
+        $statement = $this->connection->prepare($sql); $statement->execute($params); $value = $statement->fetch(PDO::FETCH_ASSOC);
+        return is_array($value) ? $value : null;
+    }
+
+    private function one(string $sql, array $params, string $error): array
+    {
+        return $this->optional($sql, $params) ?? throw new RuntimeException($error);
     }
 
     private function json(mixed $value): ?string { return $value === null ? null : JsonCodec::encodeDatabaseValue($value); }
