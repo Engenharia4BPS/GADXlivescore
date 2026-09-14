@@ -16,11 +16,11 @@ use RuntimeException;
 final class DisplayScoreIngestion
 {
     public function __construct(private readonly DisplayScoreHttpClient $http, private readonly DisplayScoreAdapter $adapter, private readonly NormalizedIngestionService $ingestion) {}
-    public function ingest(string $sourceId, string $contestId, int $testId, string $receivedAt): ReceiptResult
+    public function ingest(string $sourceId, string $contestId, int $testId, string $receivedAt, ?string $collectorSourceContestId = null, ?string $collectorRunId = null): ReceiptResult
     {
         $response = $this->http->fetch($testId);
         $redactedPayload = self::redactPayload($response['body']);
-        $receipt = new RedactedReceipt($sourceId, $contestId, null, null, $receivedAt, 'CONTEST_RUN_DISPLAYSCORE', 'GET', $response['path'], $response['status'], $response['content_type'], null, $redactedPayload, Sha256::binary($response['body']), ['redacted_keys' => true], ['endpoint' => 'displayscore', 'test_id' => $testId]);
+        $receipt = new RedactedReceipt($sourceId, $contestId, $collectorSourceContestId, $collectorRunId, $receivedAt, 'CONTEST_RUN_DISPLAYSCORE', 'GET', $response['path'], $response['status'], $response['content_type'], null, $redactedPayload, Sha256::binary($response['body']), ['redacted_keys' => true], ['endpoint' => 'displayscore', 'test_id' => $testId]);
         return $this->ingestion->ingestWithProcessor($receipt, function () use ($response, $receipt): array {
             $batch = $this->adapter->normalizePayload($response['body'], $receipt);
             return [$batch['observations'], $batch['rejected']];

@@ -215,7 +215,7 @@ no contest.run HTTP request, accessed no production database, and made no
 schema change. Collector entrypoints remain disabled. No Phase 2F.3 canonical
 persistence was performed; canonical database writes remain deferred to 2F.3.
 
-## contest.run displayscore MVP slice
+## contest.run displayscore and bounded collector-cycle MVP slice
 
 The PHP MVP has an explicit cURL HTTPS GET boundary for
 `/api/displayscore/<testid>` and a pure adapter matching the committed
@@ -225,17 +225,44 @@ aggregate source totals are retained independently of band sums, `soft` accepts
 string or number, and `qtotalc`, `qtotalp`, and `qtotalr` remain fingerprint
 evidence. Invalid row positions are rejected without discarding valid rows.
 
-It invokes the established receipt/persistence/canonical service; no polling or
-Cron entrypoint is enabled. The prepared, unrun guarded integration command is:
+`collector-cycle.php` now performs exactly one finite contest.run polling cycle
+and exits, making it suitable for cPanel Cron. It selects at most ten enabled,
+due mappings by default (null `next_poll_at` first, then due timestamp and
+mapping ID); `COLLECTOR_MAX_MAPPINGS_PER_CYCLE` may set a bounded value from 1
+through 100. A mapping must belong to the enabled source with stable code
+`CONTEST_RUN`, have a positive polling interval, and resolve its displayscore
+`testid` through its linked `contest_external_ids` row. Each valid mapping
+receives the same environment-scoped MySQL advisory lock and `collector_runs`
+lifecycle used by
+the TypeScript collector. Success and failure both advance `next_poll_at` from
+the completion timestamp; a bad, locked, or failed mapping cannot prevent
+later mappings in that execution from being considered.
+
+The cycle calls `DisplayScoreIngestion`, which in turn uses
+`NormalizedIngestionService` and the existing canonical pipeline. The durable
+raw receipt is linked to its mapping and collector run. Its structured output
+contains only stable IDs, bounded counts, outcomes, and error codes; exception
+text, database URLs, and response payloads are never logged. It has no daemon
+or infinite-loop behavior. `collector-discover.php` remains explicitly
+`NOT_IMPLEMENTED`.
+
+The prepared, unrun guarded end-to-end command is:
 
 ```text
-PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-contest-run-displayscore-probe.php
+PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-collector-cycle-probe.php
 ```
 
-It requires both test-schema guards, fetches known test ID `108`, writes only
-unique synthetic fixture rows in `dxarauca_livescore_test`, prints a sanitized
-count summary, and cleans those rows. It has not been run; no MVP real PASS is
-claimed.
+It requires an already-exported test-only `DATABASE_URL` for
+`dxarauca_livescore_test` and `COLLECTOR_ENVIRONMENT`; it contains no
+credential. The probe requires both test-schema guards, creates one synthetic
+enabled `CONTEST_RUN` mapping linked to known test ID `108`, invokes the exact
+entrypoint used by `collector-cycle.php`, and temporarily restricts the
+test-only cycle to that fixture mapping. It verifies the successful run,
+receipt/run linkage, sanitized displayscore request evidence, normalized
+receipt completion, scheduling update, and zero remaining fixture rows before
+printing its sanitized PASS summary. It has not been run: no PHP contest.run
+adapter validation PASS, production deployment, production database access, or
+schema change is claimed.
 
 ## Phase 2F.3 canonical reconciliation
 

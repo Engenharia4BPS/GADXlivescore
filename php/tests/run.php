@@ -24,6 +24,8 @@ use Araucaria\Livescore\Ingestion\SingleSourcePolicy;
 use Araucaria\Livescore\Ingestion\CanonicalReconciliationResult;
 use Araucaria\Livescore\ContestRun\DisplayScoreAdapter;
 use Araucaria\Livescore\ContestRun\DisplayScoreIngestion;
+use Araucaria\Livescore\Collector\CollectorCycle;
+use Araucaria\Livescore\Api\ScoreboardRepository;
 use PDOException;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -166,6 +168,40 @@ $tests = [
         $first = $batch['observations'][0]; assertSameValue($fixture['expected']['normalized_callsign'], $first->normalizedCallsign); assertSameValue(null, $first->sourceTimestamp); assertSameValue($fixture['expected']['timestamp_quality'], $first->sourceTimestampQuality); assertSameValue($fixture['expected']['qso_total'], $first->qsoTotal); assertSameValue(['soft' => $fixture['expected']['soft_string'], 'qtotalc' => 7, 'qtotalp' => 8, 'qtotalr' => 9], $first->fingerprintEvidence); assertSameValue($fixture['expected']['band_count'], count($first->bands));
         assertSameValue('4', $batch['observations'][1]->fingerprintEvidence['soft']);
         assertSameValue(false, str_contains(DisplayScoreIngestion::redactPayload('[{"auth":"secret","nested":{"AUTH":"secret","ok":true}}]'), 'secret'));
+    },
+    'collector cycle retains bounded polling configuration semantics' => static function (): void {
+        assertSameValue(10, CollectorCycle::validateMaximumMappings(null));
+        assertSameValue(100, CollectorCycle::validateMaximumMappings(100));
+        expectThrows(static fn (): int => CollectorCycle::validateMaximumMappings(0));
+        expectThrows(static fn (): int => CollectorCycle::validateMaximumMappings(101));
+        assertSameValue(108, CollectorCycle::validContestRunTestId('108'));
+        assertSameValue(null, CollectorCycle::validContestRunTestId('0'));
+        assertSameValue(null, CollectorCycle::validContestRunTestId('2147483648'));
+        assertSameValue(null, CollectorCycle::validContestRunTestId(' 108'));
+        assertSameValue(60, CollectorCycle::validPollInterval(60));
+        assertSameValue(null, CollectorCycle::validPollInterval(0));
+        assertSameValue('2026-09-14 12:01:00.123456', CollectorCycle::addUtcSeconds('2026-09-14 12:00:00.123456', 60));
+    },
+    'scoreboard read model preserves latest accepted snapshot timestamp evidence' => static function (): void {
+        $row = [
+            'snapshot_id' => '9007199254740993', 'contest_id' => '42', 'contest_name' => 'CQ WW CW', 'callsign' => 'ZX2A',
+            'score' => '1234567', 'qso' => '321', 'points' => '654', 'multipliers' => '87', 'source_code' => 'CONTEST_RUN',
+            'source_timestamp' => null, 'source_timestamp_raw' => '14/09/2026 09:34:56', 'source_timestamp_quality' => 'UNZONED_SOURCE_TEXT',
+            'received_at' => '2026-09-14 12:34:57.000000', 'canonical' => '0',
+        ];
+        $entry = ScoreboardRepository::formatRow($row);
+        assertSameValue('9007199254740993', $entry['snapshot_id']);
+        assertSameValue(1234567, $entry['score']);
+        assertSameValue(321, $entry['qso']);
+        assertSameValue(false, $entry['canonical']);
+        assertSameValue(true, ScoreboardRepository::formatRow(array_replace($row, ['canonical' => '1']))['canonical']);
+        assertSameValue(null, $entry['source_timestamp']);
+        assertSameValue('14/09/2026 09:34:56', $entry['source_timestamp_raw']);
+        assertSameValue('UNZONED_SOURCE_TEXT', $entry['source_timestamp_quality']);
+        assertSameValue(true, str_starts_with(ScoreboardRepository::query(false), 'SELECT'));
+        assertSameValue(true, str_contains(ScoreboardRepository::query(false), "snapshot.acceptance_status = 'ACCEPTED'"));
+        assertSameValue(true, str_contains(ScoreboardRepository::query(false), 'newer_snapshot.received_at > snapshot.received_at'));
+        assertSameValue(true, str_contains(ScoreboardRepository::query(true), 'AND entry.contest_id = ?'));
     },
 ];
 
