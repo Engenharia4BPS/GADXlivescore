@@ -6,6 +6,7 @@ require dirname(__DIR__) . '/bootstrap/autoload.php';
 
 use Araucaria\Livescore\Config\DatabaseUrl;
 use Araucaria\Livescore\Config\RuntimeConfig;
+use Araucaria\Livescore\Config\PrivateRuntimeEnvironment;
 use Araucaria\Livescore\Database\AdvisoryLock;
 use Araucaria\Livescore\Database\DatabaseSafety;
 use Araucaria\Livescore\Support\CanonicalJson;
@@ -56,6 +57,17 @@ $tests = [
             'COLLECTOR_ENVIRONMENT' => 'TEST',
         ]);
         assertSameValue('test', $config->collectorEnvironment);
+    },
+    'private runtime configuration admits only the two required string values' => static function (): void {
+        assertSameValue([
+            'DATABASE_URL' => 'mysql://user:password@localhost/dxarauca_livescore',
+            'COLLECTOR_ENVIRONMENT' => 'production',
+        ], PrivateRuntimeEnvironment::validate([
+            'DATABASE_URL' => 'mysql://user:password@localhost/dxarauca_livescore',
+            'COLLECTOR_ENVIRONMENT' => 'production',
+            'ignored' => 'value',
+        ]));
+        expectThrows(static fn (): array => PrivateRuntimeEnvironment::validate(['DATABASE_URL' => 'mysql://example']));
     },
     'database safety rejects every non-test configured schema' => static function (): void {
         DatabaseSafety::requireUrlDatabase(

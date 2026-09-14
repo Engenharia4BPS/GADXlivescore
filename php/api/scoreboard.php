@@ -2,50 +2,13 @@
 
 declare(strict_types=1);
 
-use Araucaria\Livescore\Api\ScoreboardRepository;
-use Araucaria\Livescore\Config\RuntimeConfig;
-use Araucaria\Livescore\Database\PdoConnectionFactory;
-
-require dirname(__DIR__) . '/bootstrap/autoload.php';
-
 header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
 
-if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
-    respond(405, ['error' => 'method_not_allowed']);
-}
-
-try {
-    $contestId = contestId($_GET['contest_id'] ?? null);
-} catch (InvalidArgumentException) {
-    respond(400, ['error' => 'invalid_contest_id']);
-}
-
-try {
-    $config = RuntimeConfig::fromEnvironment();
-    $entries = (new ScoreboardRepository(PdoConnectionFactory::create($config->database)))
-        ->latestAcceptedEntries($contestId);
-    respond(200, ['entries' => $entries]);
-} catch (Throwable) {
-    respond(500, ['error' => 'scoreboard_unavailable']);
-}
-
-/** @return ?string */
-function contestId(mixed $value): ?string
-{
-    if ($value === null || $value === '') {
-        return null;
-    }
-    if (!is_string($value) || preg_match('/^[1-9][0-9]*$/', $value) !== 1) {
-        throw new InvalidArgumentException('contest_id must be a positive integer.');
-    }
-    return $value;
-}
-
-/** @param array<string, mixed> $payload */
-function respond(int $status, array $payload): never
-{
-    http_response_code($status);
-    echo json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+$privateHandler = dirname(__DIR__, 3) . '/private/livescore/app/http/scoreboard.php';
+if (!is_file($privateHandler)) {
+    http_response_code(500);
+    echo '{"error":"scoreboard_unavailable"}';
     exit;
 }
+
+require $privateHandler;

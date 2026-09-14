@@ -74,24 +74,70 @@ post-cleanup zero-fixture check.
 
 ## Configuration and cPanel wrapper
 
-`DATABASE_URL` and `COLLECTOR_ENVIRONMENT` are required environment variables.
+`DATABASE_URL` and `COLLECTOR_ENVIRONMENT` are required runtime values.
 The URL parser accepts the same `mysql:` URL shape as the TypeScript database
 configuration, including percent-encoded username/password fields, but exposes
 only host, port, and database for sanitized diagnostics. It never logs the URL
 or credentials. No `.env` file is committed.
 
-The eventual Cron command must call only a protected wrapper outside
-`public_html`, for example:
+## Current MVP production layout
+
+The LiveScore MVP is deployed as one private PHP application plus a deliberately
+small public surface. These are the exact production locations for the current
+`dxaraucariadx` cPanel account:
 
 ```text
-/home2/dxaraucariadx/private/livescore/run-collector.sh
+/home2/dxaraucariadx/
+├── private/
+│   └── livescore/
+│       ├── app/                         # deployed from php/, excluding api/, deploy/, tests/
+│       │   ├── bootstrap/
+│       │   ├── src/
+│       │   ├── bin/
+│       │   └── http/scoreboard.php
+│       ├── config/runtime.php            # one private config; mode 0600
+│       ├── run-collector.sh              # deployed from php/deploy/run-collector.sh; mode 0700
+│       └── log/
+└── public_html/
+    └── livescore/
+        ├── index.html                    # deployed from web/frontend/
+        ├── assets/
+        └── api/scoreboard.php            # deployed from php/api/scoreboard.php
 ```
 
-The wrapper, which is deployment-specific and not committed with secrets,
-loads a protected environment file, exports `DATABASE_URL` and
-`COLLECTOR_ENVIRONMENT`, invokes `/usr/local/bin/php` with an absolute project
-entrypoint, and redirects logs to a private runtime directory. The Cron command
-must not contain a connection URL or credentials.
+`public_html/livescore/` must contain no PHP application source other than the
+small API bridge. The bridge walks to the sibling private directory and invokes
+the private handler; it exposes neither the config nor application source.
+
+Create `/home2/dxaraucariadx/private/livescore/config/runtime.php` manually on
+the server. It is intentionally not a repository file and must contain the
+only production credentials used by both the HTTP API and Cron:
+
+```php
+<?php
+declare(strict_types=1);
+
+return [
+    'DATABASE_URL' => 'mysql://DATABASE_USER:URL_ENCODED_PASSWORD@localhost:3306/DATABASE_NAME',
+    'COLLECTOR_ENVIRONMENT' => 'production',
+];
+```
+
+Set its permissions to `0600`; do not put it under `public_html`, copy it into
+the repository, or add a credential to a Cron command. Both the private HTTP
+handler and `collector-cycle.php` load this exact file. The CLI retains its
+environment-variable fallback only for the existing guarded test probes, not
+for the documented production layout.
+
+The Cron command calls only the protected wrapper outside `public_html`:
+
+```text
+* * * * * /home2/dxaraucariadx/private/livescore/run-collector.sh >> /home2/dxaraucariadx/private/livescore/log/collector.log 2>&1
+```
+
+The checked-in wrapper contains no credential. It resolves its own private
+directory and invokes `/usr/local/bin/php app/bin/collector-cycle.php`; that
+entrypoint reads `config/runtime.php`. Create `log/` before enabling Cron.
 
 ## Database contract
 
