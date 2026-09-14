@@ -30,6 +30,48 @@ creation. The placeholder `collector-cycle.php` and `collector-discover.php`
 explicitly return `NOT_IMPLEMENTED` rather than implying that collection is
 available.
 
+## Phase 2F.2 normalized-ingestion persistence
+
+Phase 2F.2 accepts an already-redacted receipt and already-normalized score
+observations; it has no HTTP, parser, discovery, polling, or Cron entrypoint.
+It first inserts and commits a `RECEIVED` raw-message receipt, claims it with a
+conditional `RECEIVED → PROCESSING` update, then persists the whole observation
+batch in one short PDO transaction. No network operation occurs in that
+transaction.
+
+Each observation validates that a non-null category belongs to its contest,
+upserts the `(contest_id, normalized_callsign)` entry (including the TypeScript
+null-category clearing behavior), calculates the canonical binary SHA-256
+fingerprint, checks the `(entry_id, source_id, normalized_fingerprint)` dedup
+identity, and only then inserts an accepted snapshot and its source-preserved
+band rows. Expected error 1062 races are duplicates only when the named
+snapshot unique key is identified. Category mismatches reject before entry or
+snapshot mutation. Evidence JSON remains ordinary JSON, not canonical JSON.
+
+Receipt finalization is `PROCESSED` for accepted/duplicate-only batches,
+`PARTIAL` when a rejection is mixed with an accepted or duplicate result, and
+`FAILED` for rejection-only or sanitized persistence/adapter failures. The
+repository never overwrites `validation_error`. PHP IDs stay decimal strings;
+hashes are bound as 32-byte binary values.
+
+`SingleSourcePolicy` also ports the pure canonical eligibility/sequence
+decision, preserving microsecond timestamps. It performs no canonical writes.
+`canonical_score_events`, `current_scores`, and `score_snapshot_flags` remain
+explicitly deferred to Phase 2F.3.
+
+The shared `fixtures/parity/php-ingestion-persistence-v1.json` is validated by
+the authoritative TypeScript test and by PHP’s dependency-free tests. The
+guarded ingestion command is:
+
+```text
+PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-ingestion-probe.php
+```
+
+It refuses any schema except `dxarauca_livescore_test` both from `DATABASE_URL`
+and `SELECT DATABASE()`, uses synthetic redacted fixtures only, and makes no
+HTTP calls. Its PASS path requires all assertions, strict cleanup, and a
+post-cleanup zero-fixture check.
+
 ## Configuration and cPanel wrapper
 
 `DATABASE_URL` and `COLLECTOR_ENVIRONMENT` are required environment variables.
@@ -133,6 +175,45 @@ The guarded foundation probe then connected only to
 verified a `+00:00` session timezone and advisory-lock acquire/release. The
 probe performed no contest.run HTTP request, application-data or schema
 mutation, and no production-database access.
+
+### Phase 2F.2 real validation
+
+The Phase 2F.2 dependency-free PHP suite ran on the actual cPanel PHP 8.3.33
+runtime: **13 passed, 0 failed**. The initial guarded normalized-ingestion probe
+then reported `PHP_INGESTION_PROBE_PASS` against only
+`dxarauca_livescore_test`, using fixture `php-2f2-24f55292fd0da0e0` at
+`2026-09-14 12:14:02.075446`. It made no contest.run HTTP request, accessed no
+production database, and made no schema change.
+
+The probe source double-guards both the configured `DATABASE_URL` schema and
+`SELECT DATABASE()`. Its executed assertions cover an accepted receipt,
+exact-duplicate receipt, a changed timestamp/reset accepted receipt, category
+mismatch within a mixed `PARTIAL` receipt, rejection-only `FAILED` receipt,
+32-byte normalized fingerprint storage, and zero fixture references in
+`canonical_score_events` and `score_snapshot_flags`.
+
+Closure review found limits in that initial harness, so its PASS remains useful
+initial evidence only. The strengthened probe was subsequently run on actual
+cPanel PHP 8.3.33 and is the authoritative Phase 2F.2 closure evidence:
+
+- PHP suite: **13 passed, 0 failed**.
+- Schema: `dxarauca_livescore_test` only.
+- Fixture: `php-2f2-1e68c262ca62b3e5`.
+- Timestamp: `2026-09-14 13:34:02.057187`.
+- Scenarios: accepted, exact duplicate, timestamp-only distinct observation,
+  reset/decrease, aggregate/band disagreement, category rejection, mixed
+  `PARTIAL`, rejection-only `FAILED`, and an actual thrown post-receipt failure.
+- Binary fields: `payload_sha256` and `normalized_fingerprint` were each 32
+  bytes.
+- Phase boundary: zero fixture `canonical_score_events`, `current_scores`, and
+  `score_snapshot_flags` rows.
+- Cleanup: `cleanup_remaining_fixture_rows = 0`.
+
+The strengthened PASS is emitted only after its assertions, cleanup, and
+post-cleanup verification succeed; cleanup errors cannot produce PASS. It made
+no contest.run HTTP request, accessed no production database, and made no
+schema change. Collector entrypoints remain disabled. No Phase 2F.3 canonical
+persistence was performed; canonical database writes remain deferred to 2F.3.
 
 ### Linux shell line endings
 

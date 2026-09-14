@@ -9,11 +9,19 @@ use Araucaria\Livescore\Config\RuntimeConfig;
 use Araucaria\Livescore\Database\AdvisoryLock;
 use Araucaria\Livescore\Database\DatabaseSafety;
 use Araucaria\Livescore\Support\CanonicalJson;
+use Araucaria\Livescore\Support\JsonCodec;
 use Araucaria\Livescore\Support\ContestRunValueConventions;
 use Araucaria\Livescore\Support\Sha256;
 use Araucaria\Livescore\Support\SnapshotFingerprint;
 use Araucaria\Livescore\Support\StructuredLogger;
 use Araucaria\Livescore\Support\UtcDateTime;
+use Araucaria\Livescore\Ingestion\BandObservation;
+use Araucaria\Livescore\Ingestion\NormalizedScoreObservation;
+use Araucaria\Livescore\Ingestion\ObservationPersistenceResult;
+use Araucaria\Livescore\Ingestion\PdoIngestionRepository;
+use Araucaria\Livescore\Ingestion\ReceiptResult;
+use Araucaria\Livescore\Ingestion\SingleSourcePolicy;
+use PDOException;
 use DateTimeImmutable;
 use DateTimeZone;
 use JsonException;
@@ -114,6 +122,28 @@ $tests = [
             ]),
         );
     },
+    'ingestion DTOs preserve decimal strings, nulls, and binary fingerprints' => static function (): void {
+        $observation = new NormalizedScoreObservation('9007199254740993', '2', 'DM7EE', 'DM7EE', null, ['raw' => 'category'], null, 'source text', 'UNZONED_SOURCE_TEXT', '0', '0', null, '0', ['signed' => '-1'], ['kind' => 'fixture'], [new BandObservation('40m', 'ALL', '-1', '0', null, null)]);
+        assertSameValue('9007199254740993', $observation->sourceId);
+        assertSameValue(null, $observation->categoryId);
+        assertSameValue('-1', $observation->bands[0]->qso);
+        assertSameValue(32, strlen(hex2bin(SnapshotFingerprint::normalizedHex($observation->fingerprintValues())) ?: ''));
+    },
+    'ingestion receipt status and pure sequence policy match fixture' => static function (): void {
+        $fixture = ingestionFixture();
+        foreach ($fixture['receipt_status_vectors'] as $vector) assertSameValue($vector['expected'], ReceiptResult::finalStatus($vector['accepted'], $vector['duplicates'], $vector['rejected']));
+        foreach ($fixture['single_source_policy'] as $vector) assertSameValue($vector['expected'], SingleSourcePolicy::decide($vector['candidate'], $vector['current']));
+        assertSameValue('Resolved category does not belong to the observation contest.', ObservationPersistenceResult::rejected('Resolved category does not belong to the observation contest.')->reason);
+    },
+    'snapshot duplicate classifier is narrowly constrained' => static function (): void {
+        $expected = new PDOException('Duplicate entry'); $expected->errorInfo = ['23000', 1062, "Duplicate entry for key 'uq_score_snapshots_entry_source_fingerprint'"];
+        $other = new PDOException('Duplicate entry'); $other->errorInfo = ['23000', 1062, "Duplicate entry for key 'uq_entries_contest_callsign'"];
+        assertSameValue(true, PdoIngestionRepository::isExpectedSnapshotDuplicateError($expected));
+        assertSameValue(false, PdoIngestionRepository::isExpectedSnapshotDuplicateError($other));
+    },
+    'ordinary JSON evidence preserves non-canonical insertion order' => static function (): void {
+        assertSameValue('{"z":1,"a":2}', JsonCodec::encodeDatabaseValue(['z' => 1, 'a' => 2]));
+    },
 ];
 
 $failures = 0;
@@ -146,6 +176,16 @@ function parityFixture(): array
     } catch (JsonException $error) {
         throw new RuntimeException('Parity fixture is invalid JSON.', previous: $error);
     }
+}
+
+/** @return array<string, mixed> */
+function ingestionFixture(): array
+{
+    $contents = file_get_contents(dirname(__DIR__, 2) . '/fixtures/parity/php-ingestion-persistence-v1.json');
+    if ($contents === false) throw new RuntimeException('Ingestion fixture cannot be read.');
+    $fixture = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
+    if (!is_array($fixture)) throw new RuntimeException('Ingestion fixture must be an object.');
+    return $fixture;
 }
 
 function assertSameValue(mixed $expected, mixed $actual): void

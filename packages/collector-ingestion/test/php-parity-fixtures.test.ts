@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  decideSingleSourceSequence,
   type NormalizedScoreObservation,
   normalizedFingerprint,
   stableJson,
@@ -95,6 +96,66 @@ test("parity fixture records the committed contest.run source-value conventions"
     conventions.aggregate_band_disagreement.aggregate_is_authoritative,
     true,
   );
+});
+
+test("PHP ingestion persistence fixture remains derived from the TypeScript contract", () => {
+  const persistence = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../fixtures/parity/php-ingestion-persistence-v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as {
+    receipt_status_vectors: Array<{
+      accepted: number;
+      duplicates: number;
+      rejected: number;
+      expected: string;
+    }>;
+    single_source_policy: Array<{
+      candidate: {
+        acceptance_status: string;
+        source_id: string;
+        source_timestamp: string | null;
+        source_timestamp_quality: string | null;
+      };
+      current: { source_id: string; effective_at: string } | null;
+      expected: string;
+    }>;
+  };
+  for (const vector of persistence.receipt_status_vectors) {
+    const actual = vector.rejected
+      ? vector.accepted || vector.duplicates
+        ? "PARTIAL"
+        : "FAILED"
+      : "PROCESSED";
+    assert.equal(actual, vector.expected);
+  }
+  for (const vector of persistence.single_source_policy) {
+    assert.equal(
+      decideSingleSourceSequence(
+        {
+          acceptanceStatus: vector.candidate.acceptance_status,
+          entryId: "1",
+          snapshotId: "1",
+          sourceId: vector.candidate.source_id,
+          sourceTimestamp: vector.candidate.source_timestamp,
+          sourceTimestampQuality: vector.candidate.source_timestamp_quality,
+        },
+        vector.current === null
+          ? undefined
+          : {
+              eventId: "1",
+              snapshotId: "1",
+              sourceId: vector.current.source_id,
+              effectiveAt: vector.current.effective_at,
+            },
+      ).outcome,
+      vector.expected,
+    );
+  }
 });
 
 function toObservation(
