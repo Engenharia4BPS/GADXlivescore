@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#174d37" />
+    <meta name="description" content="Araucaria LiveScore live amateur radio contest scoreboard." />
+    <title>Araucaria LiveScore</title>
+    <link rel="stylesheet" href="assets/styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="./" aria-label="Araucaria LiveScore home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>Araucaria <strong>LiveScore</strong></span>
+        </a>
+        <div class="header-actions">
+          <span class="live-indicator"><span aria-hidden="true"></span>LIVE</span>
+          <button class="refresh-button" id="refresh-button" type="button">
+            <span aria-hidden="true">↻</span> Refresh
+          </button>
+        </div>
+      </header>
+
+      <section class="intro" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Live contest monitoring</p>
+          <h1 id="page-title">Scoreboard</h1>
+          <p class="intro-copy">Latest accepted score observations, refreshed every 30 seconds.</p>
+        </div>
+        <p class="refresh-note" id="refresh-note" aria-live="polite">Waiting for live data</p>
+      </section>
+
+      <section class="scoreboard-card" aria-labelledby="scoreboard-title">
+        <div class="card-heading">
+          <div>
+            <h2 id="scoreboard-title">Live standings</h2>
+            <p id="entry-count">Loading stations…</p>
+          </div>
+          <span class="table-label">Sorted by score</span>
+        </div>
+
+        <div class="table-wrap" id="scoreboard-content" aria-live="polite">
+          <div class="state state-loading" id="loading-state">
+            <span class="spinner" aria-hidden="true"></span>
+            <p>Loading the latest score observations…</p>
+          </div>
+
+          <div class="state state-empty" id="empty-state" hidden>
+            <span class="state-icon" aria-hidden="true">⌁</span>
+            <h3>No live scores yet</h3>
+            <p>Accepted score observations will appear here as sources report them.</p>
+          </div>
+
+          <div class="state state-error" id="error-state" hidden>
+            <span class="state-icon" aria-hidden="true">!</span>
+            <h3>Live scores are temporarily unavailable</h3>
+            <p id="error-message">Please try refreshing in a moment.</p>
+            <button class="text-button" id="retry-button" type="button">Try again</button>
+          </div>
+
+          <table id="scoreboard-table" hidden>
+            <thead>
+              <tr>
+                <th scope="col" class="rank">Rank</th>
+                <th scope="col">Callsign</th>
+                <th scope="col" class="number">Score</th>
+                <th scope="col" class="number">QSOs</th>
+                <th scope="col" class="number">Points</th>
+                <th scope="col" class="number">Mults</th>
+                <th scope="col">Source</th>
+                <th scope="col">Updated</th>
+              </tr>
+            </thead>
+            <tbody id="scoreboard-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer>Data updates are shown as reported by each source.</footer>
+    </main>
+    <script src="assets/app.js" defer></script>
+  </body>
+</html>
