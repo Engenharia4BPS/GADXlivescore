@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /* Phase 2F.2 test-schema-only persistence probe. No HTTP is performed. */
-require dirname(__DIR__) . '/bootstrap/autoload.php';
+require dirname(__DIR__, 3) . '/cpanel-root/private/livescore/app/bootstrap/autoload.php';
 
 use Araucaria\Livescore\Config\DatabaseUrl;
 use Araucaria\Livescore\Database\DatabaseSafety;

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /* Phase 2F.3 synthetic test-schema probe. No HTTP, migrations, or production fallback. */
-require dirname(__DIR__) . '/bootstrap/autoload.php';
+require dirname(__DIR__, 3) . '/cpanel-root/private/livescore/app/bootstrap/autoload.php';
 
 use Araucaria\Livescore\Config\DatabaseUrl;
 use Araucaria\Livescore\Database\DatabaseSafety;

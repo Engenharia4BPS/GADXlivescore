@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /* Explicit Phase MVP integration command; never invoked by collector-cycle.php. */
-require dirname(__DIR__) . '/bootstrap/autoload.php';
+require dirname(__DIR__, 3) . '/cpanel-root/private/livescore/app/bootstrap/autoload.php';
 
 use Araucaria\Livescore\Config\DatabaseUrl;
 use Araucaria\Livescore\ContestRun\DisplayScoreAdapter;

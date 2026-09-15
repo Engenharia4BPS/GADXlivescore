@@ -4,15 +4,20 @@
 
 The existing TypeScript implementation remains the reference/core
 implementation for collector semantics, database behavior, fingerprints, and
-tests. The `php/` tree is an isolated PHP 8.3 cPanel runtime adapter; it is not
-a replacement for TypeScript and is not served from a public web directory.
+tests. The `cpanel-root/private/livescore/app/` tree is an isolated PHP 8.3
+cPanel runtime adapter; it is not a replacement for TypeScript and is not
+served from a public web directory.
 
 ```text
-php/
-  bootstrap/  minimal autoloader and version gate
-  src/        standard-library runtime primitives
-  bin/        bounded CLI entrypoints and a guarded probe
-  tests/      dependency-free PHP test runner
+cpanel-root/
+  private/livescore/app/
+    bootstrap/  minimal autoloader and version gate
+    src/        standard-library runtime primitives
+    bin/        bounded production CLI entrypoints
+  public_html/livescore/
+    index.html and assets/  public frontend
+    api/scoreboard.php      minimal public bridge
+php/tests/                  dependency-free PHP tests and guarded probes
 fixtures/
   parity/     TypeScript-generated language-neutral parity vectors
 ```
@@ -64,7 +69,7 @@ the authoritative TypeScript test and by PHP’s dependency-free tests. The
 guarded ingestion command is:
 
 ```text
-PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-ingestion-probe.php
+PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/tests/probes/cpanel-ingestion-probe.php
 ```
 
 It refuses any schema except `dxarauca_livescore_test` both from `DATABASE_URL`
@@ -83,35 +88,38 @@ or credentials. No `.env` file is committed.
 ## Current MVP production layout
 
 The LiveScore MVP is deployed as one private PHP application plus a deliberately
-small public surface. These are the exact production locations for the current
-`dxaraucariadx` cPanel account:
+small public surface. The local `cpanel-root/` is the FTP payload and mirrors
+`/home2/dxaraucariadx/` exactly:
 
 ```text
-/home2/dxaraucariadx/
+cpanel-root/                              # FTP -> /home2/dxaraucariadx/
 ├── private/
 │   └── livescore/
-│       ├── app/                         # deployed from php/, excluding api/, deploy/, tests/
+│       ├── app/                         # PHP 8.3 runtime
 │       │   ├── bootstrap/
 │       │   ├── src/
 │       │   ├── bin/
 │       │   └── http/scoreboard.php
-│       ├── config/runtime.php            # one private config; mode 0600
-│       ├── run-collector.sh              # deployed from php/deploy/run-collector.sh; mode 0700
-│       └── log/
+│       ├── config/
+│       │   ├── runtime.php.example       # committed template
+│       │   └── runtime.php               # local/server-only config; mode 0600
+│       ├── run-collector.sh              # private Cron wrapper; mode 0700
+│       └── log/.gitkeep                  # log files are ignored
 └── public_html/
     └── livescore/
-        ├── index.html                    # deployed from web/frontend/
+        ├── index.html
         ├── assets/
-        └── api/scoreboard.php            # deployed from php/api/scoreboard.php
+        └── api/scoreboard.php
 ```
 
 `public_html/livescore/` must contain no PHP application source other than the
 small API bridge. The bridge walks to the sibling private directory and invokes
 the private handler; it exposes neither the config nor application source.
 
-Create `/home2/dxaraucariadx/private/livescore/config/runtime.php` manually on
-the server. It is intentionally not a repository file and must contain the
-only production credentials used by both the HTTP API and Cron:
+Copy `cpanel-root/private/livescore/config/runtime.php.example` to
+`/home2/dxaraucariadx/private/livescore/config/runtime.php` and edit it on the
+server. `runtime.php` is intentionally ignored and must contain the only
+production credentials used by both the HTTP API and Cron:
 
 ```php
 <?php
@@ -137,7 +145,8 @@ The Cron command calls only the protected wrapper outside `public_html`:
 
 The checked-in wrapper contains no credential. It resolves its own private
 directory and invokes `/usr/local/bin/php app/bin/collector-cycle.php`; that
-entrypoint reads `config/runtime.php`. Create `log/` before enabling Cron.
+entrypoint reads `config/runtime.php`. The tracked `.gitkeep` creates `log/`;
+its runtime files are ignored.
 
 ## Database contract
 
@@ -192,10 +201,14 @@ The dependency-free PHP tests run with an explicit PHP binary:
 /usr/local/bin/php php/tests/run.php
 ```
 
+`php/tests/` and `fixtures/` stay outside `cpanel-root/` and are not uploaded
+by the production FTP sync. Run guarded probes from a local or temporary
+validation checkout that contains both paths.
+
 The prepared, unrun cPanel foundation probe is:
 
 ```text
-PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-foundation-probe.php
+PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/tests/probes/cpanel-foundation-probe.php
 ```
 
 It performs no HTTP, schema change, insert, update, or delete. It requires the
@@ -295,7 +308,7 @@ or infinite-loop behavior. `collector-discover.php` remains explicitly
 The prepared, unrun guarded end-to-end command is:
 
 ```text
-PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/bin/cpanel-collector-cycle-probe.php
+PHP_COLLECTOR_TEST_ONLY=1 /usr/local/bin/php php/tests/probes/cpanel-collector-cycle-probe.php
 ```
 
 It requires an already-exported test-only `DATABASE_URL` for
@@ -337,7 +350,7 @@ rejections are not reconciled. Reconciliation failure leaves previously
 committed snapshots durable and finalizes the receipt as sanitized `FAILED`.
 The shared `php-canonical-reconciliation-v1.json` fixture is derived from the
 TypeScript policy. A guarded, synthetic-fixture-only Phase 2F.3 cPanel probe
-is prepared at `php/bin/cpanel-canonical-probe.php`; it requires
+is prepared at `php/tests/probes/cpanel-canonical-probe.php`; it requires
 `PHP_COLLECTOR_TEST_ONLY=1` and both test-schema guards.
 
 ### Phase 2F.3 authoritative real validation

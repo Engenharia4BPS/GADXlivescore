@@ -33,7 +33,10 @@ final class ScoreboardRepository
     public static function query(bool $forContest): string
     {
         $filter = $forContest ? 'AND entry.contest_id = ?' : '';
-        return str_replace('{contest_filter}', $filter, <<<'SQL'
+        return str_replace(
+            '{contest_filter}',
+            $filter,
+            <<<'SQL'
 SELECT
   snapshot.id AS snapshot_id,
   entry.contest_id AS contest_id,
@@ -68,7 +71,7 @@ LEFT JOIN current_scores AS current_score
 WHERE newer_snapshot.id IS NULL
 {contest_filter}
 ORDER BY entry.contest_id ASC, snapshot.score DESC, callsign ASC, snapshot.received_at DESC, snapshot.id DESC
-SQL;
+SQL
         );
     }
 

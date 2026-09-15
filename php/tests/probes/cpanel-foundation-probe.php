@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/bootstrap/autoload.php';
+require dirname(__DIR__, 3) . '/cpanel-root/private/livescore/app/bootstrap/autoload.php';
 
 use Araucaria\Livescore\Config\RuntimeConfig;
 use Araucaria\Livescore\Database\AdvisoryLock;
@@ -89,7 +89,7 @@ function assertSessionBootstrap(PDO $connection): void
 
 function assertParityFixture(): void
 {
-    $contents = file_get_contents(dirname(__DIR__, 2) . '/fixtures/parity/collector-php-parity-v1.json');
+    $contents = file_get_contents(dirname(__DIR__, 3) . '/fixtures/parity/collector-php-parity-v1.json');
     if ($contents === false) {
         throw new RuntimeException('Parity fixture cannot be read.');
     }

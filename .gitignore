@@ -3,3 +3,8 @@ runtime/
 .env
 .env.local
 *.log
+
+# cPanel production-only state
+/cpanel-root/private/livescore/config/runtime.php
+/cpanel-root/private/livescore/log/*
+!/cpanel-root/private/livescore/log/.gitkeep

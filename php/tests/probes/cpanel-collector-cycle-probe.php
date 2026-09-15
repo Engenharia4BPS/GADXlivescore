@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 /* Guarded real endpoint probe. It invokes the exact command class used by collector-cycle.php. */
-require dirname(__DIR__) . '/bootstrap/autoload.php';
-require dirname(__DIR__) . '/bin/collector-cycle.php';
+require dirname(__DIR__, 3) . '/cpanel-root/private/livescore/app/bootstrap/autoload.php';
+require dirname(__DIR__, 3) . '/cpanel-root/private/livescore/app/bin/collector-cycle.php';
 
 use Araucaria\Livescore\Config\DatabaseUrl;
 use Araucaria\Livescore\Database\DatabaseSafety;
